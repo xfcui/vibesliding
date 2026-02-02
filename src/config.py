@@ -4,9 +4,11 @@ import os
 from configparser import ConfigParser
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
-
-DEFAULT_CONFIG_PATH = Path(".env")
+# Constants
+DEFAULT_CONFIG_PATH: Final[Path] = Path(".env")
+CONFIG_SECTION: Final[str] = "openrouter"
 
 
 @dataclass
@@ -20,18 +22,29 @@ class Config:
     output_dir: Path
 
     def validate(self) -> None:
-        """Raise ValueError if required fields are missing or invalid."""
+        """Validate configuration parameters.
+        
+        Raises:
+            ValueError: If required fields are missing or have invalid values.
+        """
         if not self.api_key or not self.api_key.strip():
             raise ValueError(
                 "OpenRouter API key is required. Set it via --api-key, "
                 "OPENROUTER_API_KEY env var, or in .env under [openrouter] api_key."
             )
         if self.max_concurrent < 1:
-            raise ValueError("max_concurrent must be at least 1")
+            raise ValueError(f"max_concurrent must be at least 1, got: {self.max_concurrent}")
 
 
 def _load_raw_config(config_path: Path | None = None) -> dict[str, str | int | None]:
-    """Load raw settings from .env file."""
+    """Load raw settings from .env file using ConfigParser.
+    
+    Args:
+        config_path: Path to .env file, defaults to DEFAULT_CONFIG_PATH
+    
+    Returns:
+        Dictionary with configuration values from file and environment variables
+    """
     config_path = config_path or DEFAULT_CONFIG_PATH
     result: dict[str, str | int | None] = {
         "api_key": None,
@@ -40,32 +53,46 @@ def _load_raw_config(config_path: Path | None = None) -> dict[str, str | int | N
         "max_concurrent": None,
     }
 
+    # Load from .env file if it exists
     if config_path.exists():
         parser = ConfigParser()
         parser.read(config_path)
-        if parser.has_section("openrouter"):
-            section = parser["openrouter"]
-            if section.get("api_key"):
-                result["api_key"] = section.get("api_key", "").strip() or None
-            if section.get("proxy"):
-                result["proxy"] = section.get("proxy", "").strip() or None
-            if section.get("model"):
-                result["model"] = section.get("model", "").strip() or None
-            if section.get("max_concurrent"):
+        
+        if parser.has_section(CONFIG_SECTION):
+            section = parser[CONFIG_SECTION]
+            
+            # Extract string values
+            for key in ("api_key", "proxy", "model"):
+                value = section.get(key, "").strip()
+                if value:
+                    result[key] = value
+            
+            # Extract integer value
+            max_concurrent_str = section.get("max_concurrent", "").strip()
+            if max_concurrent_str:
                 try:
-                    result["max_concurrent"] = int(section.get("max_concurrent", ""))
+                    result["max_concurrent"] = int(max_concurrent_str)
                 except ValueError:
-                    pass
+                    pass  # Ignore invalid values
 
-    if os.getenv("OPENROUTER_PROXY"):
-        result["proxy"] = os.getenv("OPENROUTER_PROXY")
-    if os.getenv("OPENROUTER_MODEL"):
-        result["model"] = os.getenv("OPENROUTER_MODEL")
-    if os.getenv("OPENROUTER_MAX_CONCURRENT"):
+    # Environment variables override .env file
+    env_overrides = {
+        "proxy": "OPENROUTER_PROXY",
+        "model": "OPENROUTER_MODEL",
+    }
+    
+    for key, env_var in env_overrides.items():
+        env_value = os.getenv(env_var)
+        if env_value:
+            result[key] = env_value
+    
+    # Handle max_concurrent separately due to type conversion
+    max_concurrent_env = os.getenv("OPENROUTER_MAX_CONCURRENT")
+    if max_concurrent_env:
         try:
-            result["max_concurrent"] = int(os.getenv("OPENROUTER_MAX_CONCURRENT", ""))
+            result["max_concurrent"] = int(max_concurrent_env)
         except ValueError:
-            pass
+            pass  # Ignore invalid values
 
     return result
 
@@ -75,30 +102,45 @@ def load_config(
     output_dir: Path | None = None,
     api_key_override: str | None = None,
 ) -> Config:
-    """Load full Config. API key: api_key_override > env > .env."""
-    raw = _load_raw_config(config_path)
-    key = get_api_key(api_key_override, config_path)
-    proxy = raw.get("proxy")
-    model = raw.get("model")
-    max_concurrent = raw.get("max_concurrent")
+    """Load and validate full configuration.
     
-    # Validate required fields from .env
+    Priority: api_key_override > OPENROUTER_API_KEY env > .env file
+    
+    Args:
+        config_path: Path to .env configuration file
+        output_dir: Output directory path
+        api_key_override: API key override from CLI
+    
+    Returns:
+        Validated Config object
+        
+    Raises:
+        ValueError: If required configuration is missing or invalid
+    """
+    raw = _load_raw_config(config_path)
+    api_key = get_api_key(api_key_override, config_path)
+    
+    # Validate required fields
+    model = raw.get("model")
     if not model:
         raise ValueError(
-            "Model is required. Set it in .env under [openrouter] model or via OPENROUTER_MODEL env var."
-        )
-    if not max_concurrent:
-        raise ValueError(
-            "max_concurrent is required. Set it in .env under [openrouter] max_concurrent or via OPENROUTER_MAX_CONCURRENT env var."
+            "Model is required. Set it in .env under [openrouter] model "
+            "or via OPENROUTER_MODEL env var."
         )
     
-    out = output_dir or Path("./output")
+    max_concurrent = raw.get("max_concurrent")
+    if not max_concurrent:
+        raise ValueError(
+            "max_concurrent is required. Set it in .env under [openrouter] max_concurrent "
+            "or via OPENROUTER_MAX_CONCURRENT env var."
+        )
+    
     return Config(
-        api_key=key,
-        proxy=proxy,
+        api_key=api_key,
+        proxy=raw.get("proxy"),
         model=str(model),
         max_concurrent=int(max_concurrent),
-        output_dir=out,
+        output_dir=output_dir or Path("./output"),
     )
 
 
@@ -106,11 +148,25 @@ def get_api_key(
     cli_value: str | None = None,
     config_path: Path | None = None,
 ) -> str | None:
-    """Resolve API key: CLI > OPENROUTER_API_KEY env > .env file."""
+    """Resolve API key with priority: CLI > OPENROUTER_API_KEY env > .env file.
+    
+    Args:
+        cli_value: API key from CLI argument
+        config_path: Path to .env configuration file
+    
+    Returns:
+        Resolved API key or None if not found
+    """
+    # Priority 1: CLI argument
     if cli_value and cli_value.strip():
         return cli_value.strip()
+    
+    # Priority 2: Environment variable
     env_key = os.getenv("OPENROUTER_API_KEY")
     if env_key and env_key.strip():
         return env_key.strip()
+    
+    # Priority 3: .env file
     raw = _load_raw_config(config_path)
-    return raw.get("api_key") or None
+    api_key = raw.get("api_key")
+    return api_key if isinstance(api_key, str) else None

@@ -4,7 +4,7 @@ import asyncio
 import base64
 import json
 import re
-from typing import Any
+from typing import Any, Final
 
 import httpx
 from tqdm import tqdm
@@ -15,19 +15,27 @@ from tenacity import (
     wait_fixed,
 )
 
+# Constants
+DEFAULT_MODEL: Final[str] = "google/gemini-3-pro-image-preview"
+DEFAULT_MAX_CONCURRENT: Final[int] = 36
+DEFAULT_TIMEOUT: Final[float] = 120.0
+DEFAULT_RETRY_ATTEMPTS: Final[int] = 3
+DEFAULT_RETRY_WAIT: Final[int] = 1
+DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)")
+
 
 class OpenRouterClient:
     """Async client for OpenRouter image generation with optional proxy and retry."""
 
-    BASE_URL = "https://openrouter.ai/api/v1"
+    BASE_URL: Final[str] = "https://openrouter.ai/api/v1"
 
     def __init__(
         self,
         api_key: str,
         proxy: str | None = None,
-        model: str = "google/gemini-3-pro-image-preview",
-        max_concurrent: int = 36,
-    ):
+        model: str = DEFAULT_MODEL,
+        max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+    ) -> None:
         self.api_key = api_key
         self._proxy = proxy
         self._model = model
@@ -71,23 +79,37 @@ class OpenRouterClient:
         return messages
 
     def _extract_image(self, data: dict[str, Any]) -> bytes:
-        """Extract image bytes from OpenRouter chat completion response."""
+        """Extract image bytes from OpenRouter chat completion response.
+        
+        Raises:
+            ValueError: If the response format is invalid or image data is missing.
+        """
         try:
-            choices = data.get("choices") or []
+            choices = data.get("choices")
             if not choices:
                 raise ValueError("No choices in response")
-            message = choices[0].get("message") or {}
-            images = message.get("images") or []
+            
+            message = choices[0].get("message")
+            if not message:
+                raise ValueError("No message in first choice")
+            
+            images = message.get("images")
             if not images:
                 raise ValueError("No images in response")
-            first = images[0]
-            url = first.get("image_url", {}).get("url") or first.get("imageUrl", {}).get("url")
+            
+            first_image = images[0]
+            url = (
+                first_image.get("image_url", {}).get("url") 
+                or first_image.get("imageUrl", {}).get("url")
+            )
             if not url:
                 raise ValueError("No image URL in first image")
+            
             # Parse data URL: data:image/png;base64,<payload>
-            match = re.match(r"data:image/[^;]+;base64,(.+)", url)
+            match = DATA_URL_PATTERN.match(url)
             if not match:
-                raise ValueError("Image URL is not a base64 data URL")
+                raise ValueError(f"Image URL is not a valid base64 data URL: {url[:50]}...")
+            
             return base64.standard_b64decode(match.group(1))
         except (KeyError, IndexError, TypeError) as e:
             raise ValueError(f"Failed to extract image from response: {e}") from e
@@ -100,11 +122,25 @@ class OpenRouterClient:
         reference_image: bytes | None = None,
         assistant_context: str | None = None,
     ) -> bytes:
-        """Generate a single image with retry logic."""
-
+        """Generate a single image with retry logic.
+        
+        Args:
+            client: HTTP client for making requests
+            prompt: User prompt for image generation
+            system_prompt: Optional system instructions
+            reference_image: Optional reference image bytes
+            assistant_context: Optional assistant context
+            
+        Returns:
+            Generated image as bytes
+            
+        Raises:
+            httpx.HTTPStatusError: If API returns error status
+            ValueError: If response format is invalid
+        """
         @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_fixed(1),
+            stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
+            wait=wait_fixed(DEFAULT_RETRY_WAIT),
             retry=retry_if_exception_type(
                 (
                     httpx.HTTPStatusError,
@@ -136,30 +172,38 @@ class OpenRouterClient:
 
     async def generate_images_parallel(
         self,
-        prompts: list[tuple[str, str | None, bytes | None, bytes | None, str | None]],
+        prompts: list[tuple[str, str | None, bytes | None, list[bytes] | None, list[str] | None]],
     ) -> list[bytes | Exception]:
-        """Generate multiple images in parallel. Shows progress with tqdm."""
+        """Generate multiple images in parallel with progress tracking.
+        
+        Args:
+            prompts: List of tuples containing (prompt, system_prompt, reference_image,
+                    article_pdfs, article_texts)
+        
+        Returns:
+            List of generated images (bytes) or exceptions for failed generations
+        """
         total = len(prompts)
         async with httpx.AsyncClient(
             proxy=self._proxy,
-            timeout=120.0,
+            timeout=DEFAULT_TIMEOUT,
         ) as client:
             with tqdm(total=total, desc="API calls", unit="call") as pbar:
 
-                async def wrap(
+                async def _wrap_with_progress(
                     prompt: str,
                     sys_prompt: str | None,
                     ref: bytes | None,
-                    article_pdf: bytes | None,
-                    article_text: str | None,
-                ):
+                    article_pdfs: list[bytes] | None,
+                    article_texts: list[str] | None,
+                ) -> bytes | Exception:
+                    """Wrap generation with progress bar update."""
                     try:
-                        # Combine article_pdf and article_text into context string for assistant
+                        # NOTE: PDF content extraction is not implemented yet
+                        # For now, combine all article texts as context
                         context = None
-                        if article_pdf or article_text:
-                            # For now, we only use article_text as context
-                            # PDF content would need to be extracted first
-                            context = article_text
+                        if article_texts:
+                            context = "\n\n---\n\n".join(article_texts)
                         return await self._generate_single_image(
                             client, prompt, sys_prompt, ref, context
                         )
@@ -167,7 +211,7 @@ class OpenRouterClient:
                         pbar.update(1)
 
                 tasks = [
-                    wrap(prompt, sys_prompt, ref, article_pdf, article_text)
-                    for prompt, sys_prompt, ref, article_pdf, article_text in prompts
+                    _wrap_with_progress(prompt, sys_prompt, ref, article_pdfs, article_texts)
+                    for prompt, sys_prompt, ref, article_pdfs, article_texts in prompts
                 ]
                 return list(await asyncio.gather(*tasks, return_exceptions=True))

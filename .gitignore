@@ -4,6 +4,9 @@
 # Backup files
 backup/
 
+# Output directories (timestamped and default)
+output*/
+
 # Python cache
 __pycache__/
 *.pyc
