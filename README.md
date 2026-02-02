@@ -11,6 +11,24 @@ Stop wrestling with PowerPoint. Just write your content, pick a style, and let A
 - **Zero Learning Curve** - If you can write markdown, you can create presentations.
 - **Iterate Fast** - Generate multiple variants instantly and pick your favorite.
 
+## How It Works
+
+Creating beautiful presentations is a breeze with this simple 4-step workflow:
+
+### Step 1: Prepare Your Ingredients 📝
+Gather your creative assets — an **article** for content reference, an **outline** for structure, and a **style image** to set the visual tone. These three files are all you need to get started.
+
+### Step 2: Generate Multiple Variants ✨
+Run VibeSliding with `--copy 4` to generate **4 unique design variants** for each slide. All variants are automatically combined into a single PDF for easy side-by-side comparison. More options = more creative possibilities!
+
+### Step 3: Curate Your Favorites 🎯
+Browse through the variants and **keep the best version** for each slide. Simply delete the ones you don't love. Your presentation is already taking shape!
+
+### Step 4: Perfect & Polish 🔄
+Not 100% happy with a slide? No problem! Use `--page` to **regenerate just that slide** with fresh variants. Repeat until every slide is exactly how you envisioned it.
+
+> **Pro tip:** This iterative workflow lets you achieve perfection without starting from scratch. Mix and match the best elements until your deck is presentation-ready!
+
 ## Features
 
 - **Style Transfer** - Apply any reference image to maintain consistent, on-brand design across all slides
