@@ -1,16 +1,25 @@
 # VibeSliding
 
-Generate slide decks from markdown outlines using AI. Outputs PNG images + combined PDF.
+**Transform your ideas into stunning presentations in seconds.** Generate beautiful slide decks from simple markdown outlines using AI. No design skills required.
+
+Stop wrestling with PowerPoint. Just write your content, pick a style, and let AI do the heavy lifting. Outputs high-quality PNG images + combined PDF ready to present.
+
+## Why VibeSliding?
+
+- **Save Hours** - What used to take hours now takes minutes. Focus on your message, not pixel-pushing.
+- **Professional Results** - Every slide looks polished and cohesive, as if designed by a pro.
+- **Zero Learning Curve** - If you can write markdown, you can create presentations.
+- **Iterate Fast** - Generate multiple variants instantly and pick your favorite.
 
 ## Features
 
-- **Style Transfer** - Apply a reference image to maintain consistent design across slides
-- **Smart Layouts** - Auto-selects optimal layouts (title, split-screen, bento grid, data focus)
-- **Parallel Generation** - Generate multiple slides/variants concurrently
-- **Multiple Variants** - Generate several design options per slide for comparison
-- **Selective Pages** - Generate specific pages or ranges
-- **Context-Aware** - Include reference articles for content accuracy
-- **Auto PDF** - Combines all slides into a presentation deck
+- **Style Transfer** - Apply any reference image to maintain consistent, on-brand design across all slides
+- **Smart Layouts** - AI auto-selects optimal layouts (title, split-screen, bento grid, data focus) based on your content
+- **Blazing Fast** - Parallel generation creates multiple slides and variants concurrently
+- **Multiple Variants** - Generate several design options per slide to find the perfect look
+- **Selective Pages** - Regenerate specific pages or ranges without redoing the entire deck
+- **Context-Aware** - Include reference articles to ensure content accuracy and depth
+- **Auto PDF** - Automatically combines all slides into a presentation-ready PDF
 
 ## Quick Start
 
