@@ -58,7 +58,8 @@
 - Context: @ Symbols → .cursorrules → .cursorignore
 - Nervous System: MCP → Clawdbot Deep-Dive
 - Conclutions: The New Developer Skills
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 6/29]
+- **Hands-On: 4 Workflows from Vibe to Swarm**
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 6/30]
 
 ---
 
@@ -103,7 +104,8 @@
 - Context: @ Symbols → .cursorrules → .cursorignore
 - Nervous System: MCP → Clawdbot Deep-Dive
 - Conclutions: The New Developer Skills
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 11/29]
+- **Hands-On: 4 Workflows from Vibe to Swarm**
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 11/30]
 
 ---
 
@@ -123,7 +125,18 @@
 
 ---
 
-## Slide 14: Plan Mode: Architecture of Thought
+## Slide 14: Composer Workflow: Multi-File Magic
+- **Cmd+I Agent Orchestrator: From Chat to Software**
+- 1. Cmd+I → Describe: "Dashboard w/ sidebar @Folders/ui + React Query"
+- 2. AI Scans: Dependencies (@Codebase), generates files (Layout.tsx, etc.)
+- 3. Visual Plan: Dependency graph preview → Approve/Edit
+- 4. Execute: Create/integrate/verify → Diff view
+- 5. Pro Tip: Chain "@Web Next.js hooks" for latest patterns
+[Visual: Composer plan graph GIF showing approval flow]
+
+---
+
+## Slide 15: Plan Mode: Architecture of Thought
 - Shift+Tab: Decouples think/type
 - Workflow: Research → Clarify → Draft → Review → Build
 - Mimics design docs; cuts arch errors
@@ -131,25 +144,37 @@
 
 ---
 
-## Slide 15: Terminal: CLI Agent
+## Slide 16: Plan Mode Workflow: Think → Build
+- **Shift+Tab: Decouple Planning from Typing**
+- 1. Agent Mode → Shift+Tab: "Design user dashboard API"
+- 2. Research: Scans @Codebase/@Docs → Asks: "REST or GraphQL?"
+- 3. Draft MD Plan: Steps/files/APIs → Edit directly
+- 4. Review: Refine architecture → Approve
+- 5. Build: Auto-triggers Composer → Code generated
+[Visual: 5-phase stepper diagram (Excalidraw: research→draft→build)]
+
+---
+
+## Slide 17: Terminal: CLI Agent
 - Monitors output; "Add to Chat" fixes stack traces
 - NL to shell: "Zip files >10MB" → find -size +10M | zip
 [Visual: Terminal error → fix GIF; NL CLI examples table]
 
 ---
 
-## Slide 16: Lecture Objectives
+## Slide 18: Lecture Objectives
 - Evolution: Crisis → AI-Native Rupture → Vibe Coding
 - Foundations: RAG → Shadow Workspace → Speculative Edits
 - Capabilities: Tab → Composer → Plan → Terminal
 - **Context: @ Symbols → .cursorrules → .cursorignore**
 - Nervous System: MCP → Clawdbot Deep-Dive
 - Conclutions: The New Developer Skills
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 16/29]
+- **Hands-On: 4 Workflows from Vibe to Swarm**
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 18/30]
 
 ---
 
-## Slide 17: Context: @ Taxonomy
+## Slide 19: Context: @ Taxonomy
 | @Symbol | Scope | Use |
 |---------|-------|-----|
 | @Files | Specific | Refactor module |
@@ -163,7 +188,7 @@
 
 ---
 
-## Slide 18: .cursorrules: Prompt the IDE
+## Slide 20: .cursorrules: Prompt the IDE
 - Persistent system prompt (.mdc + globs)
 - Ex: React: Functional comps, React Query, Tailwind, Vitest tests
 - Team consistency: Commit to repo
@@ -171,7 +196,7 @@
 
 ---
 
-## Slide 19: .cursorignore: Strategic Ignorance
+## Slide 21: .cursorignore: Strategic Ignorance
 - .cursorignore: Block (secrets/PII/binaries)
 - .cursorindexingignore: No auto-index, manual OK
 - Boosts perf/security
@@ -179,25 +204,26 @@
 
 ---
 
-## Slide 20: Lecture Objectives
+## Slide 22: Lecture Objectives
 - Evolution: Crisis → AI-Native Rupture → Vibe Coding
 - Foundations: RAG → Shadow Workspace → Speculative Edits
 - Capabilities: Tab → Composer → Plan → Terminal
 - Context: @ Symbols → .cursorrules → .cursorignore
 - **Nervous System: MCP → Clawdbot Deep-Dive**
 - Conclutions: The New Developer Skills
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 20/29]
+- **Hands-On: 4 Workflows from Vibe to Swarm**
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 22/30]
 
 ---
 
-## Slide 21: MCP: USB-C for AI
+## Slide 23: MCP: USB-C for AI
 - Anthropic protocol: Host (Cursor) → Client (AI) → Server (data)
 - Ends LLM isolation: DB/wiki/prod access
 [Visual: USB-C plug diagram (3 components connected); MCP logo]
 
 ---
 
-## Slide 22: ClawdHub: MCP Marketplace
+## Slide 24: ClawdHub: MCP Marketplace
 | Category | Skills |
 |----------|--------|
 | Development | claude-team, sentry-fixer |
@@ -210,7 +236,7 @@
 
 ---
 
-## Slide 23: Clawdbot Real-World Wins
+## Slide 25: Clawdbot Real-World Wins
 - Car negotiation: Research → Email dealers
 - CUDA → ROCm port: 30 mins
 - WHOOP + smart home: Bio-optimize
@@ -219,25 +245,26 @@
 
 ---
 
-## Slide 24: Local-First: Mac Mini Stack
+## Slide 26: Local-First: Mac Mini Stack
 - Why: Unified mem, <10W idle, privacy
 - Headless closets; Tailscale tunnel remote
 [Visual: Mac Mini photo stack; power chart (Mac vs. PC); tunnel diagram]
 
 ---
 
-## Slide 25: Lecture Objectives
+## Slide 27: Lecture Objectives
 - Evolution: Crisis → AI-Native Rupture → Vibe Coding
 - Foundations: RAG → Shadow Workspace → Speculative Edits
 - Capabilities: Tab → Composer → Plan → Terminal
 - Context: @ Symbols → .cursorrules → .cursorignore
 - Nervous System: MCP → Clawdbot Deep-Dive
 - **Conclutions: The New Developer Skills**
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 25/29]
+- **Hands-On: 4 Workflows from Vibe to Swarm**
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 27/30]
 
 ---
 
-## Slide 26: The New Developer Skills
+## Slide 28: The New Developer Skills
 - 1. Composer orchestration
 - 2. Plan mode thinking
 - 3. Context mastery (@ symbols)
@@ -248,7 +275,18 @@
 
 ---
 
-## Slide 27: Responsibility in AI Collaboration
+## Slide 29: Agent Best Practices
+- **Atomic Tasks:** Small, verifiable changes beat monolithic rewrites
+- **One Task, One Agent:** Each agent should handle a single, focused task
+- **Avoid Context Overload:** Long conversations degrade output quality
+- **Reset When Full:** Start a new agent when context becomes cluttered
+- **Parallel Isolation:** Multiple agents can work simultaneously on separate tasks
+- Core insight: AI agents perform best with clear boundaries and fresh context
+[Visual: Diagram showing single-task agents vs. overloaded agent (clean boxes vs. tangled mess); context meter (green→yellow→red); parallel agent lanes]
+
+---
+
+## Slide 30: Responsibility in AI Collaboration
 - Programmer mindset: Code error → "I wrote it wrong" → Fix the code
 - Leader mindset: Task failure → "Were my instructions clear?" → Refine the directive
 - AI mindset shift: AI error → Not "AI is stupid" → Optimize the prompt
@@ -259,7 +297,7 @@
 
 ---
 
-## Slide 28: Vibe Coding Done Right
+## Slide 31: Vibe Coding Done Right
 - Misconception: "One sentence → AI does everything" — Is this expectation realistic?
 - True goal: Focus on top-level architecture; delegate implementation to AI
 - Complex tasks require complete design specs before AI execution
@@ -271,13 +309,13 @@
 
 ---
 
-## Slide 29: Questions?
+## Slide 32: Questions?
 - Thank you for your attention!
 [Visual: Open mic icon]
 
 ---
 
-##Global Visual Requirements
+## Appendix: Global Visual Requirements
 - **Theme:** Cursor dark mode (#0D1117 background, #58A6FF accents, #C9D1D9 text)
 - **Fonts:** JetBrains Mono (titles, 48-60pt bold), Inter (body, 24-32pt)
 - **Layout:** 35/65 title/body split (left title+icon, right content); 16:9 aspect

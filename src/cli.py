@@ -164,7 +164,13 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
     "--page",
     type=str,
     default=None,
-    help="Specific pages to generate (e.g., '1', '1,3,5', '1-5', '1,3-5,7'). Default: all pages.",
+    help="Specific pages to generate (e.g., '1', '1,3,5', '1-5', '1,3-5,7'). Default: all pages. Note: quote comma-separated values when using shell.",
+)
+@click.option(
+    "--proxy",
+    type=str,
+    default=None,
+    help="HTTP/HTTPS proxy URL (e.g., 'http://localhost:8080'). Default: no proxy.",
 )
 def main(
     outline: Path,
@@ -174,6 +180,7 @@ def main(
     article: tuple[str, ...],
     api_key: str | None,
     page: str | None,
+    proxy: str | None,
 ) -> None:
     """Generate slide images from markdown outline. Without --style: first slide only. With --style: all slides in that style."""
     # Create timestamped output directory if not specified
@@ -181,7 +188,7 @@ def main(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output = Path(f"./output_{timestamp}")
     
-    config = load_config(output_dir=output, api_key_override=api_key)
+    config = load_config(output_dir=output, api_key_override=api_key, proxy_override=proxy)
     config.validate()
 
     # Parse page specification

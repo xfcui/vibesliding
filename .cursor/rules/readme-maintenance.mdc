@@ -1,0 +1,20 @@
+---
+description: Keep README.md updated after code changes, no new docs
+alwaysApply: true
+---
+
+# README Maintenance
+
+After making code changes, check if README.md needs updating:
+
+- **Update README.md** when changes affect:
+  - Installation or setup instructions
+  - Usage examples or CLI commands
+  - Configuration options
+  - Dependencies (requirements.txt, package.json, etc.)
+  - API or interface changes
+  - Feature additions or removals
+
+- **Do NOT create new documentation files** (no new .md files, no separate docs folder)
+
+- Keep all documentation in the existing README.md

@@ -101,15 +101,19 @@ def load_config(
     config_path: Path | None = None,
     output_dir: Path | None = None,
     api_key_override: str | None = None,
+    proxy_override: str | None = None,
 ) -> Config:
     """Load and validate full configuration.
     
-    Priority: api_key_override > OPENROUTER_API_KEY env > .env file
+    Priority: 
+    - api_key: api_key_override > OPENROUTER_API_KEY env > .env file
+    - proxy: proxy_override > OPENROUTER_PROXY env > .env file
     
     Args:
         config_path: Path to .env configuration file
         output_dir: Output directory path
         api_key_override: API key override from CLI
+        proxy_override: Proxy override from CLI
     
     Returns:
         Validated Config object
@@ -119,6 +123,9 @@ def load_config(
     """
     raw = _load_raw_config(config_path)
     api_key = get_api_key(api_key_override, config_path)
+    
+    # Resolve proxy with priority: CLI > env > .env file
+    proxy = proxy_override if proxy_override else raw.get("proxy")
     
     # Validate required fields
     model = raw.get("model")
@@ -137,7 +144,7 @@ def load_config(
     
     return Config(
         api_key=api_key,
-        proxy=raw.get("proxy"),
+        proxy=proxy,
         model=str(model),
         max_concurrent=int(max_concurrent),
         output_dir=output_dir or Path("./output"),

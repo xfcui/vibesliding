@@ -6,6 +6,7 @@ from typing import Final
 
 # Constants
 H2_PATTERN: Final[re.Pattern] = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+SLIDE_PREFIX_PATTERN: Final[re.Pattern] = re.compile(r"^Slide\s+\d+:\s*", re.IGNORECASE)
 
 
 @dataclass
@@ -42,6 +43,8 @@ def parse_markdown(markdown_text: str) -> list[Slide]:
     slides: list[Slide] = []
     for i, match in enumerate(matches):
         title = match.group(1).strip()
+        # Remove "Slide n:" prefix if present
+        title = SLIDE_PREFIX_PATTERN.sub("", title).strip()
         start = match.end()
         
         # Content runs until the next H2 or end of text

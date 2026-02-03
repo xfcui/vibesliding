@@ -48,6 +48,7 @@ echo ""
 
 # Run the CLI with all arguments passed to this script
 python -m src.cli \
+  --proxy "socks5://127.0.0.1:1080" \
   --outline examples/outline.md \
   --article "examples/*.pdf" \
   --style examples/style.png \
