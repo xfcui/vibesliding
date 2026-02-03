@@ -59,7 +59,7 @@
 - Nervous System: MCP → Clawdbot Deep-Dive
 - Conclutions: The New Developer Skills
 - **Hands-On: 4 Workflows from Vibe to Swarm**
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 6/30]
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 6/33]
 
 ---
 
@@ -105,7 +105,7 @@
 - Nervous System: MCP → Clawdbot Deep-Dive
 - Conclutions: The New Developer Skills
 - **Hands-On: 4 Workflows from Vibe to Swarm**
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 11/30]
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 11/33]
 
 ---
 
@@ -170,7 +170,7 @@
 - Nervous System: MCP → Clawdbot Deep-Dive
 - Conclutions: The New Developer Skills
 - **Hands-On: 4 Workflows from Vibe to Swarm**
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 18/30]
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 18/33]
 
 ---
 
@@ -212,7 +212,7 @@
 - **Nervous System: MCP → Clawdbot Deep-Dive**
 - Conclutions: The New Developer Skills
 - **Hands-On: 4 Workflows from Vibe to Swarm**
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 22/30]
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 22/33]
 
 ---
 
@@ -260,7 +260,7 @@
 - Nervous System: MCP → Clawdbot Deep-Dive
 - **Conclutions: The New Developer Skills**
 - **Hands-On: 4 Workflows from Vibe to Swarm**
-[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 27/30]
+[Visual: Vertical timeline diagram (Excalidraw, icons per section); progress bar 27/33]
 
 ---
 
@@ -309,7 +309,20 @@
 
 ---
 
-## Slide 32: Questions?
+## Slide 32: Agent Workflow: Learn → Act → Update
+- **Learn Design Docs:** Agent reads architecture, specs, and context before coding
+- **Act — Coding Cycle:**
+  - *Plan:* Break down task into steps; confirm approach
+  - *Implement:* Write code following design constraints
+  - *Test:* Validate changes; fix issues before moving on
+- **Update Design Docs:** If implementation deviates or reveals gaps, sync back to docs
+- Loop: Each agent iteration improves both code and documentation
+- Anti-pattern: Coding without reading specs → drift from architecture
+[Visual: Circular flow diagram (Learn→Plan→Implement→Test→Update→Learn); Excalidraw loop arrows; doc icons syncing with code icons]
+
+---
+
+## Slide 33: Questions?
 - Thank you for your attention!
 [Visual: Open mic icon]
 
