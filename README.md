@@ -64,11 +64,13 @@ python3 -m src.cli --outline outline.md --style style.png --article "docs/*.pdf"
 | Option | Description |
 |--------|-------------|
 | `--outline` | Markdown outline (required) |
-| `--style` | Style reference image |
+| `--style` | Style reference image (omit for first slide only) |
 | `--copy` | Variants per slide (default: 1) |
-| `--page` | Specific pages to generate |
+| `--page` | Specific pages to generate (e.g., `1,3,5-7`) |
 | `--article` | Reference docs (supports glob patterns) |
 | `--output` | Custom output directory |
+| `--api-key` | OpenRouter API key (or use `.env`) |
+| `--proxy` | HTTP/HTTPS proxy URL |
 
 ## Outline Format
 
@@ -124,13 +126,16 @@ output_20260202_143045/
 Create `.env` from the example:
 
 ```ini
+# Optional: proxy for API requests
+proxy = socks5://127.0.0.1:1080
+
 [openrouter]
 api_key = your-openrouter-api-key-here
 model = google/gemini-3-pro-image-preview
 max_concurrent = 36
 ```
 
-Get your API key at [openrouter.ai](https://openrouter.ai)
+Get your API key at [openrouter.ai](https://openrouter.ai/keys)
 
 ## Examples
 

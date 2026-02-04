@@ -1,20 +1,42 @@
 ---
-description: Keep README.md updated after code changes, no new docs
+description: Keep README.md updated, attractive, and user-friendly
 alwaysApply: true
 ---
 
 # README Maintenance
 
-After making code changes, check if README.md needs updating:
+## Style
 
-- **Update README.md** when changes affect:
-  - Installation or setup instructions
-  - Usage examples or CLI commands
-  - Configuration options
-  - Dependencies (requirements.txt, package.json, etc.)
-  - API or interface changes
-  - Feature additions or removals
+- Title with emoji: `# ProjectName ✨`
+- Bold tagline + conversational hook
+- Em-dash descriptions: `**Feature** — Explanation`
+- Emoji bullets sparingly (🚀 🎨 ⚡)
+- Friendly closing with emojis
 
-- **Do NOT create new documentation files** (no new .md files, no separate docs folder)
+## Structure
 
-- Keep all documentation in the existing README.md
+1. Title + tagline
+2. Why ProjectName? 🚀 (benefits)
+3. Features (emoji bullets)
+4. How It Works (numbered steps)
+5. Quick Start (2-3 commands max)
+6. Usage (basic → advanced examples)
+7. Options table
+8. Input/Output format
+9. Configuration
+10. Examples folder reference
+11. Friendly sign-off
+
+## Update When
+
+- CLI options change
+- Dependencies change
+- Config options change
+- Input/output format changes
+- New/removed features
+
+## Rules
+
+- No new .md files — all docs in README.md
+- Bullets over paragraphs
+- Code blocks over descriptions

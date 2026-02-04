@@ -1,0 +1,126 @@
+---
+description: PPT outline format standards for slide generation
+alwaysApply: true
+---
+
+# Outline Standards
+
+## File Structure
+
+```markdown
+# PPT Outline: [Presentation Title]
+
+---
+
+## Slide N: [Slide Title]
+- **Label:** Self-contained explanation with reasoning
+- **Another Point:** Why this matters, not just what it is
+- Core insight: Summary that ties the slide together
+[Visual: Main visual; secondary element; style notes]
+[Speech: Presenter narration script for this slide]
+
+---
+
+## Appendix: Global Visual Requirements
+- **Theme:** Colors, accents
+- **Fonts:** Title/body fonts and sizes
+```
+
+## Required Elements
+
+1. **Title** — `# PPT Outline: [Title]`
+2. **Separators** — `---` between every slide
+3. **Headers** — `## Slide N: [Title]` (sequential numbering)
+4. **Visual Tags** — `[Visual: description]` at end of each slide
+5. **Speech Tags** — `[Speech: script]` for presenter narration
+
+## Bullet Guidelines
+
+Write **self-contained, explanatory bullets** — not terse fragments.
+
+| Rule | Description |
+|------|-------------|
+| `**Label:** explanation` | Bold label followed by reasoning |
+| Self-contained | Each bullet makes sense without slide title |
+| Why over what | Include reasoning, not just facts |
+| 5-6 per slide | Substantial bullets, not 2-3 terse ones |
+
+**Summary bullets** to tie concepts together:
+- `Core insight:` — Main takeaway
+- `Anti-pattern:` — What to avoid
+- `Core logic:` — Underlying principle
+
+### Good vs Bad
+
+```markdown
+# Good
+- **Clear Boundaries:** Each component should handle a single, focused responsibility
+- Core insight: Systems perform best with clear interfaces and isolation
+
+# Bad (too brief)
+- Token limit: 128k-200k
+- Performance: Fast
+```
+
+**Other content types:**
+- **Tables** for taxonomies/comparisons
+- **Sub-bullets** for workflows (Plan → Implement → Test)
+
+## Visual Tag Format
+
+```markdown
+[Visual: Main visual; secondary element; style notes]
+```
+
+Examples:
+- `[Visual: Diagram showing X vs. Y (clean boxes vs. tangled mess); meter graphic]`
+- `[Visual: Circular flow diagram (A→B→C→A); Excalidraw arrows]`
+
+## Speech Tag Format
+
+```markdown
+[Speech: Presenter narration script — conversational, 30-60 seconds per slide]
+```
+
+Guidelines:
+- **Conversational tone** — Write as the presenter would speak, not read
+- **Expand on bullets** — Add context, stories, or emphasis not in the text
+- **Transitions** — Connect to previous/next slides when relevant
+- **Timing** — Aim for 30-60 seconds of natural speech per slide
+
+Examples:
+- `[Speech: So here's the key insight — AI agents work best when you give them one clear task. Think of it like delegating to a junior developer: the clearer your instructions, the better the output.]`
+- `[Speech: Let me walk you through how this actually works in practice. First, the agent reads your design docs — this is crucial, because without context, you get drift.]`
+
+## Slide Types
+
+### Title Slide
+- **Title** and **Sub-Title** in bold
+- Presenter name, affiliation
+- Minimal bullets (2-3 max)
+- `[Visual: Logo, event branding]`
+
+### Content Slides
+- 5-6 substantial bullets with `**Label:** explanation` format
+- Include summary bullet (Core insight/Anti-pattern)
+- Full `[Visual:]` and `[Speech:]` tags
+
+### Progress Slides
+- Repeat all lecture objectives
+- **Bold** the current section
+- Include progress bar in visual: `progress bar N/total` (e.g., `progress bar 6/33`)
+- `[Visual: Vertical timeline diagram; progress bar 11/33]`
+
+### Closing Slides
+- Thank you message
+- Call to action or Q&A prompt
+- Contact info if relevant
+- `[Visual: Simple icon, open mic]`
+
+### Appendix
+- **Theme:** Colors, background, accents
+- **Fonts:** Title/body fonts and sizes
+- **Layout:** Split ratio, aspect ratio
+- **Animations:** Transition styles
+- **Icons:** Icon set, size, color
+- **Diagrams:** Style guidelines
