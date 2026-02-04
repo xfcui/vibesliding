@@ -1,10 +1,8 @@
 # Environment variables
 .env
 
-# Backup files
-backup/
-
 # Output directories (timestamped and default)
+backup/
 output*/
 
 # Python cache
