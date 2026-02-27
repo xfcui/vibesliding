@@ -16,7 +16,7 @@ from tenacity import (
 )
 
 # Constants
-DEFAULT_MODEL: Final[str] = "google/gemini-3-pro-image-preview"
+DEFAULT_MODEL: Final[str] = "google/gemini-3.1-flash-image-preview"
 DEFAULT_MAX_CONCURRENT: Final[int] = 36
 DEFAULT_TIMEOUT: Final[float] = 120.0
 DEFAULT_RETRY_ATTEMPTS: Final[int] = 3
