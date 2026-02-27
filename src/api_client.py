@@ -42,7 +42,14 @@ class OpenRouterClient:
         self._proxy = proxy
         self._model = model
         self.max_concurrent = max_concurrent
-        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._semaphore: asyncio.Semaphore | None = None
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        """Get or create semaphore for the current event loop."""
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        return self._semaphore
 
     def _build_messages(
         self,
@@ -154,7 +161,7 @@ class OpenRouterClient:
             ),
         )
         async def _do_request() -> bytes:
-            async with self._semaphore:
+            async with self.semaphore:
                 payload = {
                     "model": self._model,
                     "messages": self._build_messages(
