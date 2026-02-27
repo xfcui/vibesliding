@@ -131,7 +131,7 @@ proxy = socks5://127.0.0.1:1080
 
 [openrouter]
 api_key = your-openrouter-api-key-here
-model = google/gemini-3-pro-image-preview
+model = google/gemini-3.1-flash-image-preview
 max_concurrent = 36
 ```
 
