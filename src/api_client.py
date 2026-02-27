@@ -1,10 +1,12 @@
 """OpenRouter API client with SOCKS5 proxy, parallel execution, and retry."""
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import json
 import re
-from typing import Any, Final
+from typing import Any, Final, Optional, Union, List, Tuple
 
 import httpx
 from tqdm import tqdm

@@ -1,10 +1,12 @@
 """CLI entry point for PPT slide image generator."""
 
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime
 import glob as glob_module
 from pathlib import Path
-from typing import Final
+from typing import Final, Optional, Set, List, Tuple, Union
 
 import click
 from dotenv import load_dotenv

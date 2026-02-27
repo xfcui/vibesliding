@@ -1,7 +1,9 @@
 """Image generation orchestrator - parallel slide image generation."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Final
+from typing import Final, List, Dict, Tuple, Set, Optional, Union
 
 from src.api_client import OpenRouterClient
 from src.output import create_pdf_from_images, save_image

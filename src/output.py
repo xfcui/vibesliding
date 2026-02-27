@@ -1,8 +1,10 @@
 """Output handler - save images and generate PDF."""
 
+from __future__ import annotations
+
 import io
 from pathlib import Path
-from typing import Final
+from typing import Final, List, Tuple
 
 import img2pdf
 from PIL import Image

@@ -1,8 +1,10 @@
 """Markdown parser - extracts slides from H2 headings."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, List
 
 # Constants
 H2_PATTERN: Final[re.Pattern] = re.compile(r"^##\s+(.+)$", re.MULTILINE)

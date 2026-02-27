@@ -1,10 +1,12 @@
 """Configuration loading from .env file with env/CLI overrides."""
 
+from __future__ import annotations
+
 import os
 from configparser import ConfigParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Optional, Dict, Union
 
 # Constants
 DEFAULT_CONFIG_PATH: Final[Path] = Path(".env")
