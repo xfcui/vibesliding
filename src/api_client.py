@@ -186,9 +186,14 @@ class OpenRouterClient:
             List of generated images (bytes) or exceptions for failed generations
         """
         total = len(prompts)
+        limits = httpx.Limits(
+            max_connections=self.max_concurrent,
+            max_keepalive_connections=self.max_concurrent,
+        )
         async with httpx.AsyncClient(
             proxy=self._proxy,
             timeout=DEFAULT_TIMEOUT,
+            limits=limits,
         ) as client:
             with tqdm(total=total, desc="API calls", unit="call") as pbar:
 

@@ -74,6 +74,16 @@ class SlideImageGenerator:
         with_articles: bool = False,
     ) -> tuple[str, str]:
         """Build user and system prompts for current slide."""
+        # Extract visual tag if present
+        visual_tag = ""
+        visual_match = re.search(r"\[Visual:\s*(.*?)\]", slide.content, re.IGNORECASE)
+        if visual_match:
+            visual_tag = visual_match.group(1).strip()
+            # Remove the tag from content for the text part of the prompt
+            clean_content = slide.content.replace(visual_match.group(0), "").strip()
+        else:
+            clean_content = slide.content
+
         article_instruction = ""
         if with_articles:
             article_instruction = (
@@ -112,6 +122,8 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 2. **Typography**: Use professional, highly legible sans-serif fonts. Title size: 60pt+. Body size: 24pt+.
 3. **Margins**: Maintain 5% safety margin on all sides. No content touching edges.
 4. **Consistency**: Maintain a cohesive visual identity throughout the presentation.
+5. **Visual Hierarchy**: The Title must be the most prominent element, followed by key takeaways.
+6. **No Overlap**: Ensure text never overlaps with graphics, icons, or diagrams.
 
 {outline_context}
 {article_instruction}
@@ -125,10 +137,11 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 - **Statement**: One powerful sentence or quote in center. Best for "Vision" or "Impact".
 
 # VISUAL INTERPRETATION
-- If the content contains a `[Visual: ...]` tag, PRIORITIZE that instruction for the imagery/layout.
-- Visualize the core concept. Do not just paste the text.
-- If the content contains a list, use a clean list layout with custom bullets or icons.
-- If the content contains data, visualize it as a chart or infographic.
+- **STRICT ADHERENCE**: If a `[Visual: ...]` instruction is provided, you MUST prioritize it.
+- **Graphic Quality**: Use high-quality, professional vector graphics, diagrams, or illustrations.
+- **Concept Visualization**: Visualize the core concept. Do not just paste the text.
+- **Lists**: Use clean list layouts with custom bullets or icons.
+- **Data**: Visualize data as modern charts or infographics.
 
 # NEGATIVE CONSTRAINTS
 - NO spelling errors.
@@ -138,18 +151,20 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 - NO low-contrast text (e.g., light gray on white).
 - NO photorealistic human faces (use silhouettes or stylized avatars if needed)."""
 
+        visual_instruction = f"\n**STRICT VISUAL INSTRUCTION**: {visual_tag}" if visual_tag else ""
+        
         user_prompt = f"""GENERATE SLIDE {slide.index}
 **Title**: {slide.title}
 
 **Content**:
-{slide.content}
+{clean_content}
+{visual_instruction}
 
 **Design Instructions**:
 1. Select the most appropriate layout from the LAYOUT STRATEGY list above.
-2. Visualize the core concept. Do not just paste the text.
-3. If the content contains a list, use a clean list layout with custom bullets or icons.
-4. If the content contains data, visualize it as a chart or infographic.
-5. ENSURE the Title is the most prominent text element.
+2. Visualize the core concept according to the STRICT VISUAL INSTRUCTION if provided.
+3. Ensure the Title is the most prominent text element and distinct from the body.
+4. Maintain high contrast and professional alignment.
 """
 
         return user_prompt, system_prompt

@@ -29,6 +29,7 @@ def create_pdf_from_images(image_paths: list[Path], output_path: Path) -> None:
     """Combine multiple images into a single PDF with consistent 16:9 resolution.
     
     All images are resized to 1920x1080 if needed to ensure consistency.
+    Resized images overwrite the original files to save memory.
     
     Args:
         image_paths: List of image file paths to combine
@@ -39,13 +40,11 @@ def create_pdf_from_images(image_paths: list[Path], output_path: Path) -> None:
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    valid_paths = [p for p in image_paths if p.exists()]
-    if not valid_paths:
-        raise ValueError("No valid image paths to create PDF")
+    valid_paths: list[str] = []
     
-    processed_images: list[bytes] = []
-    
-    for path in valid_paths:
+    for path in image_paths:
+        if not path.exists():
+            continue
         try:
             with Image.open(path) as img:
                 # Check if resize is needed
@@ -53,20 +52,17 @@ def create_pdf_from_images(image_paths: list[Path], output_path: Path) -> None:
                     # Resize to target 16:9 resolution
                     img_resized = img.resize(TARGET_RESOLUTION, Image.Resampling.LANCZOS)
                     
-                    # Save to bytes buffer
-                    img_byte_arr = io.BytesIO()
+                    # Overwrite the file on disk to save memory
                     fmt = img.format if img.format else DEFAULT_IMAGE_FORMAT
-                    img_resized.save(img_byte_arr, format=fmt)
-                    processed_images.append(img_byte_arr.getvalue())
-                else:
-                    # Size is correct, use file directly
-                    processed_images.append(path.read_bytes())
+                    img_resized.save(path, format=fmt)
+            
+            valid_paths.append(str(path))
         except Exception as e:
             print(f"Warning: skipping invalid image {path}: {e}")
             continue
 
-    if not processed_images:
+    if not valid_paths:
         raise ValueError("No valid images to process after filtering")
 
     with open(output_path, "wb") as f:
-        f.write(img2pdf.convert(processed_images))
+        f.write(img2pdf.convert(valid_paths))
