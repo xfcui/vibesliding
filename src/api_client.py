@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import re
 from typing import Any, Final, Optional, Union, List, Tuple
 
@@ -15,7 +16,11 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_fixed,
+    before_sleep_log,
 )
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_MODEL: Final[str] = "google/gemini-3.1-flash-image-preview"
@@ -150,6 +155,7 @@ class OpenRouterClient:
         @retry(
             stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
             wait=wait_fixed(DEFAULT_RETRY_WAIT),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
             retry=retry_if_exception_type(
                 (
                     httpx.HTTPStatusError,
