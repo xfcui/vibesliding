@@ -50,6 +50,6 @@ echo ""
 python -m src.cli \
   --outline examples/outline.md \
   --article "examples/*.pdf" \
-  --style examples/style.png \
+  --style "examples/style_*.png" \
   --copy 4 \
   "$@"

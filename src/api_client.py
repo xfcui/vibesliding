@@ -32,6 +32,18 @@ DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)"
 DEFAULT_VOLCENGINE_BASE: Final[str] = "https://ark.cn-beijing.volces.com/api/v3"
 
 
+def _image_bytes_to_data_url(image_bytes: bytes) -> str:
+    """Build ``data:image/...;base64,...`` for API reference images."""
+    if len(image_bytes) >= 3 and image_bytes[:3] == b"\xff\xd8\xff":
+        mime = "image/jpeg"
+    elif len(image_bytes) >= 8 and image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    else:
+        mime = "image/png"
+    b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
 class OpenRouterClient:
     """Async client for OpenRouter image generation with optional proxy and retry."""
 
@@ -61,7 +73,7 @@ class OpenRouterClient:
         self,
         prompt: str,
         system_prompt: str | None = None,
-        reference_image: bytes | None = None,
+        reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build messages array for the API request."""
@@ -73,24 +85,20 @@ class OpenRouterClient:
         if assistant_context:
             messages.append({"role": "assistant", "content": assistant_context})
 
-        if reference_image is None:
+        if not reference_images:
             messages.append({"role": "user", "content": prompt})
             return messages
 
-        b64 = base64.standard_b64encode(reference_image).decode("ascii")
-        data_url = f"data:image/png;base64,{b64}"
-        messages.append(
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": data_url},
-                    },
-                ],
-            }
-        )
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        for image_bytes in reference_images:
+            data_url = _image_bytes_to_data_url(image_bytes)
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                }
+            )
+        messages.append({"role": "user", "content": content})
         return messages
 
     def _extract_image(self, data: dict[str, Any]) -> bytes:
@@ -134,7 +142,7 @@ class OpenRouterClient:
         client: httpx.AsyncClient,
         prompt: str,
         system_prompt: str | None = None,
-        reference_image: bytes | None = None,
+        reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
     ) -> bytes:
         """Generate a single image with retry logic.
@@ -143,7 +151,7 @@ class OpenRouterClient:
             client: HTTP client for making requests
             prompt: User prompt for image generation
             system_prompt: Optional system instructions
-            reference_image: Optional reference image bytes
+            reference_images: Optional reference image bytes (one or more)
             assistant_context: Optional assistant context
             
         Returns:
@@ -172,7 +180,7 @@ class OpenRouterClient:
                 payload = {
                     "model": self._model,
                     "messages": self._build_messages(
-                        prompt, system_prompt, reference_image, assistant_context
+                        prompt, system_prompt, reference_images, assistant_context
                     ),
                     "modalities": ["image", "text"],
                 }
@@ -188,14 +196,16 @@ class OpenRouterClient:
 
     async def generate_images_parallel(
         self,
-        prompts: list[tuple[str, str | None, bytes | None, list[bytes] | None, list[str] | None]],
+        prompts: list[tuple[
+            str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None
+        ]],
     ) -> list[bytes | Exception]:
         """Generate multiple images in parallel with progress tracking.
-        
+
         Args:
-            prompts: List of tuples containing (prompt, system_prompt, reference_image,
-                    article_pdfs, article_texts)
-        
+            prompts: List of (prompt, system_prompt, reference_images,
+                article_pdfs, article_texts).
+
         Returns:
             List of generated images (bytes) or exceptions for failed generations
         """
@@ -214,7 +224,7 @@ class OpenRouterClient:
                 async def _wrap_with_progress(
                     prompt: str,
                     sys_prompt: str | None,
-                    ref: bytes | None,
+                    ref_images: list[bytes] | None,
                     article_pdfs: list[bytes] | None,
                     article_texts: list[str] | None,
                 ) -> bytes | Exception:
@@ -226,14 +236,16 @@ class OpenRouterClient:
                         if article_texts:
                             context = "\n\n---\n\n".join(article_texts)
                         return await self._generate_single_image(
-                            client, prompt, sys_prompt, ref, context
+                            client, prompt, sys_prompt, ref_images, context
                         )
                     finally:
                         pbar.update(1)
 
                 tasks = [
-                    _wrap_with_progress(prompt, sys_prompt, ref, article_pdfs, article_texts)
-                    for prompt, sys_prompt, ref, article_pdfs, article_texts in prompts
+                    _wrap_with_progress(
+                        prompt, sys_prompt, ref_images, article_pdfs, article_texts
+                    )
+                    for prompt, sys_prompt, ref_images, article_pdfs, article_texts in prompts
                 ]
                 return list(await asyncio.gather(*tasks, return_exceptions=True))
 
@@ -247,9 +259,8 @@ class VolcengineClient:
       ``response_format`` (``url`` / ``b64_json``), ``watermark`` (same as
       SDK ``extra_body`` for Ark-specific fields).
 
-    - **Image-to-image / style reference:** pass reference bytes (e.g. the
-      slide style PNG/JPEG). The client adds ``image`` as a list of data URLs,
-      same as Ark's SDK when you pass reference images (e.g. via ``extra_body``).
+    - **Image-to-image / style reference:** pass one or more reference images
+      (PNG/JPEG). The client sets ``image`` to a list of data URLs.
     """
 
     def __init__(
@@ -298,15 +309,8 @@ class VolcengineClient:
 
     @staticmethod
     def _data_url_for_image(image_bytes: bytes) -> str:
-        """Build ``data:image/...;base64,...`` for Ark ``image`` (png or jpeg from magic bytes)."""
-        if len(image_bytes) >= 3 and image_bytes[:3] == b"\xff\xd8\xff":
-            mime = "image/jpeg"
-        elif len(image_bytes) >= 8 and image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-            mime = "image/png"
-        else:
-            mime = "image/png"
-        b64 = base64.standard_b64encode(image_bytes).decode("ascii")
-        return f"data:{mime};base64,{b64}"
+        """Build ``data:image/...;base64,...`` for Ark ``image``."""
+        return _image_bytes_to_data_url(image_bytes)
 
     async def _extract_image_bytes(
         self, client: httpx.AsyncClient, data: dict[str, Any]
@@ -330,7 +334,7 @@ class VolcengineClient:
         client: httpx.AsyncClient,
         prompt: str,
         system_prompt: str | None = None,
-        reference_image: bytes | None = None,
+        reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
     ) -> bytes:
         @retry(
@@ -360,8 +364,10 @@ class VolcengineClient:
                     "sequential_image_generation": "disabled",
                     "watermark": self._watermark,
                 }
-                if reference_image is not None:
-                    payload["image"] = [self._data_url_for_image(reference_image)]
+                if reference_images:
+                    payload["image"] = [
+                        self._data_url_for_image(b) for b in reference_images
+                    ]
                 response = await client.post(
                     f"{self._base_url}/images/generations",
                     json=payload,
@@ -377,7 +383,9 @@ class VolcengineClient:
 
     async def generate_images_parallel(
         self,
-        prompts: list[tuple[str, str | None, bytes | None, list[bytes] | None, list[str] | None]],
+        prompts: list[tuple[
+            str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None
+        ]],
     ) -> list[bytes | Exception]:
         total = len(prompts)
         limits = httpx.Limits(
@@ -394,7 +402,7 @@ class VolcengineClient:
                 async def _wrap_with_progress(
                     prompt: str,
                     sys_prompt: str | None,
-                    ref: bytes | None,
+                    ref_images: list[bytes] | None,
                     article_pdfs: list[bytes] | None,
                     article_texts: list[str] | None,
                 ) -> bytes | Exception:
@@ -403,13 +411,15 @@ class VolcengineClient:
                         if article_texts:
                             context = "\n\n---\n\n".join(article_texts)
                         return await self._generate_single_image(
-                            client, prompt, sys_prompt, ref, context
+                            client, prompt, sys_prompt, ref_images, context
                         )
                     finally:
                         pbar.update(1)
 
                 tasks = [
-                    _wrap_with_progress(prompt, sys_prompt, ref, article_pdfs, article_texts)
-                    for prompt, sys_prompt, ref, article_pdfs, article_texts in prompts
+                    _wrap_with_progress(
+                        prompt, sys_prompt, ref_images, article_pdfs, article_texts
+                    )
+                    for prompt, sys_prompt, ref_images, article_pdfs, article_texts in prompts
                 ]
                 return list(await asyncio.gather(*tasks, return_exceptions=True))

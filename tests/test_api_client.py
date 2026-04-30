@@ -97,7 +97,7 @@ async def test_volcengine_image_to_image_includes_image_field(mock_image_bytes, 
     respx_mock.post(f"{client._base_url}/images/generations").mock(side_effect=on_request)
     async with httpx.AsyncClient() as http_client:
         await client._generate_single_image(
-            http_client, "prompt", reference_image=mock_image_bytes
+            http_client, "prompt", reference_images=[mock_image_bytes]
         )
     body = captured["body"]
     assert isinstance(body, dict)
@@ -106,3 +106,46 @@ async def test_volcengine_image_to_image_includes_image_field(mock_image_bytes, 
     assert isinstance(img_list, list) and len(img_list) == 1
     assert isinstance(img_list[0], str)
     assert img_list[0].startswith("data:image/png;base64,")
+
+
+@pytest.mark.asyncio
+async def test_volcengine_multiple_style_references(mock_image_bytes, respx_mock):
+    import base64 as b64mod
+    import json
+
+    captured: dict[str, object] = {}
+
+    def on_request(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        out_b64 = b64mod.b64encode(mock_image_bytes).decode("ascii")
+        return httpx.Response(200, json={"data": [{"b64_json": out_b64}]})
+
+    client = VolcengineClient(
+        api_key="fake",
+        model="doubao-seedream-5-0-260128",
+        response_format="b64_json",
+    )
+    respx_mock.post(f"{client._base_url}/images/generations").mock(side_effect=on_request)
+    async with httpx.AsyncClient() as http_client:
+        await client._generate_single_image(
+            http_client,
+            "prompt",
+            reference_images=[mock_image_bytes, mock_image_bytes],
+        )
+    body = captured["body"]
+    assert isinstance(body, dict)
+    imgs = body["image"]
+    assert isinstance(imgs, list) and len(imgs) == 2
+
+
+def test_openrouter_build_messages_multiple_images() -> None:
+    client = OpenRouterClient(api_key="x")
+    tiny_png = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+        b"\x00\x00\x05\x00\x01\r\n-\xdb\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    msgs = client._build_messages("do it", reference_images=[tiny_png, tiny_png])
+    user = msgs[-1]["content"]
+    assert isinstance(user, list)
+    assert sum(1 for p in user if p.get("type") == "image_url") == 2

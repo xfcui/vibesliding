@@ -19,6 +19,12 @@ load_dotenv()
 
 # Constants
 SUPPORTED_ARTICLE_EXTENSIONS: Final[set[str]] = {".pdf", ".md", ".markdown"}
+SUPPORTED_STYLE_EXTENSIONS: Final[set[str]] = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+}
 
 
 def parse_page_spec(page_spec: str | None) -> set[int] | None:
@@ -124,6 +130,49 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
     return all_paths
 
 
+def expand_style_paths(patterns: list[str]) -> list[Path]:
+    """Expand glob patterns into sorted, unique image paths for style references."""
+    if not patterns:
+        return []
+
+    raw: list[Path] = []
+    for pattern in patterns:
+        pattern = pattern.strip()
+        if not pattern:
+            continue
+        if any(char in pattern for char in "*?[]"):
+            matched = glob_module.glob(pattern)
+            if not matched:
+                raise click.UsageError(f"No files found matching pattern: {pattern}")
+            raw.extend(Path(p) for p in matched)
+        else:
+            path = Path(pattern)
+            if not path.exists():
+                raise click.UsageError(f"Style image not found: {pattern}")
+            raw.append(path)
+
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in sorted(raw, key=lambda p: str(p.resolve())):
+        rp = path.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            unique.append(path)
+
+    for path in unique:
+        if not path.is_file():
+            raise click.UsageError(f"Not a file: {path}")
+        sfx = path.suffix.lower()
+        if sfx not in SUPPORTED_STYLE_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_STYLE_EXTENSIONS))
+            raise click.UsageError(
+                f"Unsupported style image format '{sfx}' for {path.name}. "
+                f"Supported: {supported}"
+            )
+
+    return unique
+
+
 @click.command()
 @click.option(
     "--outline",
@@ -133,9 +182,13 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
 )
 @click.option(
     "--style",
-    type=click.Path(path_type=Path, exists=True),
-    default=None,
-    help="Path to style reference image. If omitted, only the first slide is generated.",
+    type=str,
+    multiple=True,
+    default=(),
+    help=(
+        "Style reference image path(s) or glob; repeatable "
+        '(e.g. --style "examples/style_*.png"). If omitted, only the first slide is generated.'
+    ),
 )
 @click.option(
     "--copy",
@@ -182,7 +235,7 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
 )
 def main(
     outline: Path,
-    style: Path | None,
+    style: tuple[str, ...],
     copy: int,
     output: Path | None,
     article: tuple[str, ...],
@@ -192,6 +245,13 @@ def main(
     provider: str | None,
 ) -> None:
     """Generate slide images from markdown outline. Without --style: first slide only. With --style: all slides in that style."""
+    if style:
+        style_paths = expand_style_paths(list(style))
+        if not style_paths:
+            raise click.UsageError("No style images resolved from --style patterns")
+    else:
+        style_paths = None
+
     # Create timestamped output directory if not specified
     if output is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -246,11 +306,12 @@ def main(
             types.append(f"{md_count} Markdown")
         info_parts.append(f"Articles: {len(article_paths)} files ({', '.join(types)})")
     
-    if style is not None:
-        info_parts.append(f"Style: {style}")
+    if style_paths is not None:
+        names = ", ".join(p.name for p in style_paths)
+        info_parts.append(f"Style ({len(style_paths)}): {names}")
     
     output_str = str(output.resolve())
-    if style is None:
+    if style_paths is None:
         output_str += " (first slide only)"
     info_parts.append(f"Output: {output_str}")
     
@@ -281,7 +342,7 @@ def main(
     generator = SlideImageGenerator(client=client)
 
     async def run() -> None:
-        if style is None:
+        if style_paths is None:
             # When no style is provided, generate first slide only
             # Check if page filter conflicts
             if page_numbers is not None and 1 not in page_numbers:
@@ -298,7 +359,7 @@ def main(
         else:
             by_slide = await generator.generate_all_slide_images(
                 outline=outline_text,
-                style_image_path=style,
+                style_image_paths=style_paths,
                 copy=copy,
                 output_dir=output,
                 article_pdfs=article_pdfs if article_pdfs else None,

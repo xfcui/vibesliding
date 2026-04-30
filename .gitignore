@@ -3,7 +3,7 @@
 
 # Output directories (timestamped and default)
 backup/
-output*/
+output_*/
 
 # Python cache
 __pycache__/

@@ -13,7 +13,7 @@ Stop wrestling with PowerPoint. Just write your content, pick a style, and let A
 
 ## Features
 
-- 🎨 **Style Transfer** — Apply any reference image for consistent, on-brand design
+- 🎨 **Style Transfer** — One or more reference images for a consistent, on-brand deck
 - 🧠 **Smart Layouts** — AI auto-selects optimal layouts based on your content
 - 🔄 **Multiple Variants** — Generate several design options per slide
 - 🎯 **Selective Regeneration** — Redo specific slides without starting over
@@ -23,7 +23,7 @@ Stop wrestling with PowerPoint. Just write your content, pick a style, and let A
 ## How It Works
 
 ### Step 1: Prepare Your Ingredients 📝
-Gather your creative assets — an **article** for content reference, an **outline** for structure, and a **style image** to set the visual tone.
+Gather your creative assets — an **article** for content reference, an **outline** for structure, and **style reference image(s)** (paths or a glob like `examples/style_*.png`) to set the visual tone.
 
 ### Step 2: Generate Multiple Variants ✨
 Run with `--copy 4` to generate **4 unique design variants** for each slide. All variants are combined into a single PDF for easy comparison.
@@ -46,17 +46,17 @@ cp .env.example .env  # Add your OpenRouter API key
 ## Usage
 
 ```bash
-# Basic: generate slides with style reference
-python3 -m src.cli --outline outline.md --style style.png
+# Basic: generate slides with style references (glob matches multiple PNGs)
+python3 -m src.cli --outline outline.md --style "examples/style_*.png"
 
 # Generate 4 variants per slide (recommended!)
-python3 -m src.cli --outline outline.md --style style.png --copy 4
+python3 -m src.cli --outline outline.md --style "examples/style_*.png" --copy 4
 
 # Regenerate specific slides
-python3 -m src.cli --outline outline.md --style style.png --page "1,3,5-7" --copy 4
+python3 -m src.cli --outline outline.md --style "examples/style_*.png" --page "1,3,5-7" --copy 4
 
-# Include reference articles for better content
-python3 -m src.cli --outline outline.md --style style.png --article "docs/*.pdf"
+# Multiple explicit files (repeat --style) plus articles
+python3 -m src.cli --outline outline.md --style cover.png --style body.png --article "docs/*.pdf"
 ```
 
 ### Options
@@ -64,7 +64,7 @@ python3 -m src.cli --outline outline.md --style style.png --article "docs/*.pdf"
 | Option | Description |
 |--------|-------------|
 | `--outline` | Markdown outline (required) |
-| `--style` | Style reference image (omit for first slide only) |
+| `--style` | Style reference image(s): path and/or glob; repeat `--style` for multiple patterns (omit for first slide only) |
 | `--copy` | Variants per slide (default: 1) |
 | `--page` | Specific pages to generate (e.g., `1,3,5-7`) |
 | `--article` | Reference docs (supports glob patterns) |

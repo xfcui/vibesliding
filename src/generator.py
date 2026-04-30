@@ -95,10 +95,10 @@ class SlideImageGenerator:
         if with_style_reference:
             style_instruction = (
                 "\n# VISUAL STYLE REFERENCE (STRICT ADHERENCE REQUIRED):\n"
-                "1. **Analyze the Reference Image**: Extract the color palette (background, accents, text), font style, layout grid, and graphic mood.\n"
-                "2. **Style Transfer**: Replicate the exact visual style. Match the background texture and color hex codes EXACTLY.\n"
-                "3. **Consistency**: The new slide MUST look like it belongs to the same deck as the reference.\n"
-                "4. **Content Adaptation**: Keep the reference's LOOK, but replace the content with the new text provided below."
+                "1. **Analyze the Reference Images**: Extract the shared deck style—color palette (background, accents, text), font style, layout grid, and graphic mood—from every reference slide shown.\n"
+                "2. **Style Transfer**: Replicate that exact visual system. Match background texture and key colors consistently with the references.\n"
+                "3. **Consistency**: The new slide MUST look like it belongs to the same presentation as those references.\n"
+                "4. **Content Adaptation**: Preserve the references' LOOK, but replace content with the new text provided below."
             )
         elif global_style:
              style_instruction = (
@@ -298,18 +298,18 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
     async def generate_all_slide_images(
         self,
         outline: str,
-        style_image_path: Path,
+        style_image_paths: list[Path],
         copy: int,
         output_dir: Path,
         article_pdfs: list[bytes] | None = None,
         article_texts: list[str] | None = None,
         page_filter: set[int] | None = None,
     ) -> dict[int, list[Path]]:
-        """Generate multiple image variants for all slides using style reference.
+        """Generate multiple image variants for all slides using style reference(s).
         
         Args:
             outline: Markdown outline text
-            style_image_path: Path to style reference image
+            style_image_paths: Paths to reference images (same deck / visual system)
             copy: Number of variants per slide
             output_dir: Output directory path
             article_pdfs: Optional list of reference article PDF bytes
@@ -341,19 +341,22 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
         total = len(slides) * copy
         slide_titles = [s.title for s in slides]
         print(f"Parsed outline: {len(slides)} slide(s). Titles: {slide_titles}")
-        print(f"Using style reference: {style_image_path}")
+        print(
+            "Using style reference(s): "
+            + ", ".join(p.name for p in style_image_paths)
+        )
         print(
             f"Generating {total} image(s) ({len(slides)} slides × {copy} per slide, "
             f"max {self.client.max_concurrent} concurrent)..."
         )
 
-        ref_image = style_image_path.read_bytes()
+        ref_images = [p.read_bytes() for p in style_image_paths]
         outline_context = self._build_full_outline_context(slides)
         with_articles = bool(article_pdfs or article_texts)
         
         # Build all prompts for parallel generation
         all_prompts: list[
-            tuple[str, str | None, bytes | None, list[bytes] | None, list[str] | None]
+            tuple[str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None]
         ] = []
         
         for slide in slides:
@@ -366,7 +369,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
             )
             all_prompts.extend(
                 [
-                    (user_prompt, system_prompt, ref_image, article_pdfs, article_texts)
+                    (user_prompt, system_prompt, ref_images, article_pdfs, article_texts)
                     for _ in range(copy)
                 ]
             )

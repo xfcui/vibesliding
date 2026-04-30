@@ -1,7 +1,7 @@
 import pytest
 import click
 from pathlib import Path
-from src.cli import parse_page_spec, expand_article_paths
+from src.cli import parse_page_spec, expand_article_paths, expand_style_paths
 
 def test_parse_page_spec_single():
     assert parse_page_spec("1") == {1}
@@ -50,3 +50,26 @@ def test_expand_article_paths_invalid(tmp_path):
         expand_article_paths([str(f)])
     with pytest.raises(click.UsageError):
         expand_article_paths(["nonexistent.pdf"])
+
+
+def test_expand_style_paths_glob_sorted(tmp_path):
+    (tmp_path / "style_zebra.png").write_bytes(b"x")
+    (tmp_path / "style_alpha.png").write_bytes(b"y")
+    pattern = str(tmp_path / "style_*.png")
+    got = expand_style_paths([pattern])
+    assert [p.name for p in got] == ["style_alpha.png", "style_zebra.png"]
+
+
+def test_expand_style_paths_duplicate_glob_same_file(tmp_path):
+    p = tmp_path / "style_x.png"
+    p.write_bytes(b"z")
+    pat = str(tmp_path / "*.png")
+    got = expand_style_paths([pat, pat])
+    assert len(got) == 1 and got[0] == p
+
+
+def test_expand_style_paths_invalid_extension(tmp_path):
+    gif = tmp_path / "bad.gif"
+    gif.write_bytes(b"g")
+    with pytest.raises(click.UsageError, match="Unsupported style"):
+        expand_style_paths([str(gif)])
