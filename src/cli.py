@@ -6,13 +6,13 @@ import asyncio
 from datetime import datetime
 import glob as glob_module
 from pathlib import Path
-from typing import Final, Optional, Set, List, Tuple, Union
+from typing import Final, cast
 
 import click
 from dotenv import load_dotenv
 
-from src.api_client import OpenRouterClient
-from src.config import load_config
+from src.api_client import OpenRouterClient, VolcengineClient
+from src.config import Provider, load_config
 from src.generator import SlideImageGenerator
 
 load_dotenv()
@@ -160,7 +160,7 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
 @click.option(
     "--api-key",
     envvar="OPENROUTER_API_KEY",
-    help="OpenRouter API key (or set OPENROUTER_API_KEY, or put in .env).",
+    help="API key for the selected provider (or OPENROUTER_API_KEY / VOLCENGINE_API_KEY, or .env).",
 )
 @click.option(
     "--page",
@@ -172,7 +172,13 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
     "--proxy",
     type=str,
     default=None,
-    help="HTTP/HTTPS proxy URL (e.g., 'http://localhost:8080'). Default: no proxy.",
+    help="HTTP/HTTPS proxy URL for OpenRouter only (ignored for Volcengine).",
+)
+@click.option(
+    "--provider",
+    type=click.Choice(["openrouter", "volcengine"], case_sensitive=False),
+    default=None,
+    help="Image API (default: volcengine if unset in env/.env). Overrides IMAGE_PROVIDER.",
 )
 def main(
     outline: Path,
@@ -183,6 +189,7 @@ def main(
     api_key: str | None,
     page: str | None,
     proxy: str | None,
+    provider: str | None,
 ) -> None:
     """Generate slide images from markdown outline. Without --style: first slide only. With --style: all slides in that style."""
     # Create timestamped output directory if not specified
@@ -190,7 +197,15 @@ def main(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output = Path(f"./output_{timestamp}")
     
-    config = load_config(output_dir=output, api_key_override=api_key, proxy_override=proxy)
+    prov_override: Provider | None = (
+        cast(Provider, provider.lower()) if provider else None
+    )
+    config = load_config(
+        output_dir=output,
+        api_key_override=api_key,
+        proxy_override=proxy,
+        provider_override=prov_override,
+    )
     config.validate()
 
     # Parse page specification
@@ -239,16 +254,30 @@ def main(
         output_str += " (first slide only)"
     info_parts.append(f"Output: {output_str}")
     
+    info_parts.append(f"Provider: {config.provider}")
     click.echo("  |  ".join(info_parts))
 
     # Initialize components
     outline_text = outline.read_text(encoding="utf-8")
-    client = OpenRouterClient(
-        api_key=config.api_key,
-        proxy=config.proxy,
-        model=config.model,
-        max_concurrent=config.max_concurrent,
-    )
+    assert config.api_key is not None  # validated
+    if config.provider == "volcengine":
+        client = VolcengineClient(
+            api_key=config.api_key,
+            model=config.model,
+            max_concurrent=config.max_concurrent,
+            base_url=config.volcengine_base_url,
+            image_size=config.volcengine_image_size,
+            response_format=config.volcengine_response_format,
+            watermark=config.volcengine_watermark,
+            proxy=config.volcengine_proxy,
+        )
+    else:
+        client = OpenRouterClient(
+            api_key=config.api_key,
+            proxy=config.proxy,
+            model=config.model,
+            max_concurrent=config.max_concurrent,
+        )
     generator = SlideImageGenerator(client=client)
 
     async def run() -> None:

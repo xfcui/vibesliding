@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Final, List, Dict, Tuple, Set, Optional, Union
+from typing import Final
 
-from src.api_client import OpenRouterClient
+from src.api_client import OpenRouterClient, VolcengineClient
 from src.output import create_pdf_from_images, save_image
 from src.parser import Slide, parse_markdown
 
@@ -23,7 +23,7 @@ STYLE_KEYWORDS: Final[tuple[str, ...]] = (
 class SlideImageGenerator:
     """Orchestrates parallel image generation for PPT slides."""
 
-    def __init__(self, client: OpenRouterClient) -> None:
+    def __init__(self, client: OpenRouterClient | VolcengineClient) -> None:
         self.client = client
 
     @staticmethod
