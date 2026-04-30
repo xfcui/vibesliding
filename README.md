@@ -19,20 +19,14 @@ Stop wrestling with PowerPoint. Just write your content, pick a style, and let A
 - 🎯 **Selective Regeneration** — Redo specific slides without starting over
 - ⚡ **Blazing Fast** — Parallel generation for speed
 - 📄 **Auto PDF** — All slides combined into one file
+- 🔌 **Multiple Providers** — Support for Volcengine (Doubao) and OpenRouter
 
 ## How It Works
 
-### Step 1: Prepare Your Ingredients 📝
-Gather your creative assets — an **article** for content reference, an **outline** for structure, and **style reference image(s)** (paths or a glob like `examples/style_*.png`) to set the visual tone.
-
-### Step 2: Generate Multiple Variants ✨
-Run with `--copy 4` to generate **4 unique design variants** for each slide. All variants are combined into a single PDF for easy comparison.
-
-### Step 3: Curate Your Favorites 🎯
-Browse through the variants and **keep the best version** for each slide. Simply delete the ones you don't love.
-
-### Step 4: Perfect & Polish 🔄
-Use `--page` to **regenerate just that slide** with fresh variants. Repeat until every slide is exactly how you envisioned it.
+1. **Prepare Your Ingredients** — Gather your creative assets: an **article** for content reference, an **outline** for structure, and **style reference image(s)** (paths or a glob like `examples/style_*.png`) to set the visual tone.
+2. **Generate Multiple Variants** — Run with `--copy 4` to generate **4 unique design variants** for each slide. All variants are combined into a single PDF for easy comparison.
+3. **Curate Your Favorites** — Browse through the variants and **keep the best version** for each slide. Simply delete the ones you don't love.
+4. **Perfect & Polish** — Use `--page` to **regenerate just that slide** with fresh variants. Repeat until every slide is exactly how you envisioned it.
 
 > 💡 **Pro tip:** This iterative workflow lets you achieve perfection without starting from scratch!
 
@@ -40,7 +34,7 @@ Use `--page` to **regenerate just that slide** with fresh variants. Repeat until
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # Add your OpenRouter API key
+cp .env.example .env  # Add your API key (Volcengine by default)
 ```
 
 ## Usage
@@ -69,10 +63,13 @@ python3 -m src.cli --outline outline.md --style cover.png --style body.png --art
 | `--page` | Specific pages to generate (e.g., `1,3,5-7`) |
 | `--article` | Reference docs (supports glob patterns) |
 | `--output` | Custom output directory |
-| `--api-key` | OpenRouter API key (or use `.env`) |
-| `--proxy` | HTTP/HTTPS proxy URL |
+| `--provider` | Image API provider (`volcengine` or `openrouter`) |
+| `--api-key` | API key for the selected provider (or use `.env`) |
+| `--proxy` | HTTP/HTTPS proxy URL for OpenRouter only |
 
-## Outline Format
+## Input/Output Format
+
+### Outline Format
 
 Each H2 heading becomes a slide:
 
@@ -109,7 +106,7 @@ What challenge are we solving?
 - Keep slides concise (~30 words max)
 - Global Visual Requirements sets the overall look
 
-## Output
+### Output
 
 Each run creates a timestamped directory:
 
@@ -126,16 +123,22 @@ output_20260202_143045/
 Create `.env` from the example:
 
 ```ini
-# Optional: proxy for API requests
-proxy = socks5://127.0.0.1:1080
+# Default backend: volcengine (Ark, no proxy unless use_proxy below) or openrouter
+provider = volcengine
+
+# Shared settings (apply before first [section])
+max_concurrent = 36
+
+[volcengine]
+api_key = your-ark-api-key-here
+model = doubao-seedream-5-0-260128
+use_proxy = false
 
 [openrouter]
 api_key = your-openrouter-api-key-here
-model = google/gemini-3.1-flash-image-preview
-max_concurrent = 36
+model = google/gemini-3-pro-image-preview
+use_proxy = true
 ```
-
-Get your API key at [openrouter.ai](https://openrouter.ai/keys)
 
 ## Examples
 
