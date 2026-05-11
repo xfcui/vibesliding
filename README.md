@@ -34,7 +34,7 @@ Stop wrestling with PowerPoint. Just write your content, pick a style, and let A
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # Add your API key (Volcengine by default)
+cp .env.example .env  # Add your API key (OpenRouter by default)
 ```
 
 ## Usage
@@ -57,15 +57,19 @@ python3 -m src.cli --outline outline.md --style cover.png --style body.png --art
 
 | Option | Description |
 |--------|-------------|
-| `--outline` | Markdown outline (required) |
+| `--outline` | Markdown outline (required for generation; omit with `--balance-only`) |
 | `--style` | Style reference image(s): path and/or glob; repeat `--style` for multiple patterns (omit for first slide only) |
 | `--copy` | Variants per slide (default: 1) |
 | `--page` | Specific pages to generate (e.g., `1,3,5-7`) |
 | `--article` | Reference docs (supports glob patterns) |
 | `--output` | Custom output directory |
-| `--provider` | Image API provider (`volcengine` or `openrouter`) |
+| `--provider` | Image API provider (`openrouter` or `volcengine`; required if not in `IMAGE_PROVIDER` or `.env`) |
 | `--api-key` | API key for the selected provider (or use `.env`) |
 | `--proxy` | HTTP/HTTPS proxy URL for OpenRouter only |
+| `--balance-only` | Print OpenRouter credits from the API and exit (OpenRouter only; no `--outline`) |
+| `--no-balance` | Skip the OpenRouter credits line after a normal run |
+
+After each successful run with **OpenRouter**, the CLI prints remaining credits (from `GET /api/v1/credits`) unless you pass `--no-balance`. That endpoint expects an OpenRouter **Management API key**; add `OPENROUTER_MANAGEMENT_API_KEY` or `[openrouter] management_api_key` alongside your normal `api_key`. Volcengine runs never fetch or print this.
 
 ## Input/Output Format
 
@@ -123,8 +127,8 @@ output_20260202_143045/
 Create `.env` from the example:
 
 ```ini
-# Default backend: volcengine (Ark, no proxy unless use_proxy below) or openrouter
-provider = volcengine
+# Default backend: openrouter or volcengine (Ark, no proxy unless use_proxy below)
+provider = openrouter
 
 # Shared settings (apply before first [section])
 max_concurrent = 36
@@ -136,6 +140,8 @@ use_proxy = false
 
 [openrouter]
 api_key = your-openrouter-api-key-here
+# Optional: Management API key for balance line only — https://openrouter.ai/settings/management-keys
+# management_api_key = sk-or-v1-mgmt-...
 model = google/gemini-3-pro-image-preview
 use_proxy = true
 ```

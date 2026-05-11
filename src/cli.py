@@ -173,11 +173,41 @@ def expand_style_paths(patterns: list[str]) -> list[Path]:
     return unique
 
 
+async def _echo_openrouter_account_credits(client: OpenRouterClient) -> None:
+    """Print credits line from GET ``/api/v1/credits`` (best-effort)."""
+    outcome = await client.fetch_credits()
+    if outcome.credits is not None:
+        c = outcome.credits
+        remaining = c["total_credits"] - c["total_usage"]
+        click.echo(
+            "OpenRouter credits: "
+            f"{remaining:.4f} remaining "
+            f"({c['total_usage']:.4f} used / "
+            f"{c['total_credits']:.4f} purchased)"
+        )
+        return
+    err_parts = ["OpenRouter: could not fetch account credits."]
+    if outcome.error:
+        err_parts.append(f"({outcome.error})")
+    if client._management_api_key:
+        err_parts.append(
+            "With a management key set, failures are usually proxy or network issues "
+            "try [openrouter] use_proxy = false or OPENROUTER_USE_PROXY=0."
+        )
+    else:
+        err_parts.append(
+            "Use an OpenRouter Management API key: set OPENROUTER_MANAGEMENT_API_KEY "
+            "or [openrouter] management_api_key "
+            "(create one at https://openrouter.ai/settings/management-keys)."
+        )
+    click.echo(" ".join(err_parts), err=True)
+
+
 @click.command()
 @click.option(
     "--outline",
     type=click.Path(path_type=Path, exists=True),
-    required=True,
+    default=None,
     help="Path to markdown outline file.",
 )
 @click.option(
@@ -231,10 +261,22 @@ def expand_style_paths(patterns: list[str]) -> list[Path]:
     "--provider",
     type=click.Choice(["openrouter", "volcengine"], case_sensitive=False),
     default=None,
-    help="Image API (default: volcengine if unset in env/.env). Overrides IMAGE_PROVIDER.",
+    help="Image API (required unless IMAGE_PROVIDER or provider in .env). Overrides IMAGE_PROVIDER.",
+)
+@click.option(
+    "--balance-only",
+    is_flag=True,
+    default=False,
+    help="Fetch and print OpenRouter account credits, then exit (openrouter only).",
+)
+@click.option(
+    "--no-balance",
+    is_flag=True,
+    default=False,
+    help="Skip printing OpenRouter credits after a successful run.",
 )
 def main(
-    outline: Path,
+    outline: Path | None,
     style: tuple[str, ...],
     copy: int,
     output: Path | None,
@@ -243,8 +285,47 @@ def main(
     page: str | None,
     proxy: str | None,
     provider: str | None,
+    balance_only: bool,
+    no_balance: bool,
 ) -> None:
     """Generate slide images from markdown outline. Without --style: first slide only. With --style: all slides in that style."""
+    if balance_only and no_balance:
+        raise click.UsageError("--balance-only cannot be used together with --no-balance.")
+    if balance_only and outline is not None:
+        raise click.UsageError("--outline cannot be used with --balance-only.")
+    if not balance_only and outline is None:
+        raise click.UsageError("Missing option '--outline'.")
+
+    if balance_only:
+        prov_override: Provider | None = (
+            cast(Provider, provider.lower()) if provider else None
+        )
+        config = load_config(
+            output_dir=Path("."),
+            api_key_override=api_key,
+            proxy_override=proxy,
+            provider_override=prov_override,
+        )
+        config.validate()
+        if config.provider != "openrouter":
+            raise click.UsageError("--balance-only requires provider openrouter.")
+        assert config.api_key is not None
+        or_client = OpenRouterClient(
+            api_key=config.api_key,
+            proxy=config.proxy,
+            model=config.model,
+            max_concurrent=config.max_concurrent,
+            management_api_key=config.openrouter_management_api_key,
+        )
+
+        async def _balance() -> None:
+            await _echo_openrouter_account_credits(or_client)
+
+        asyncio.run(_balance())
+        return
+
+    assert outline is not None
+
     if style:
         style_paths = expand_style_paths(list(style))
         if not style_paths:
@@ -257,9 +338,7 @@ def main(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output = Path(f"./output_{timestamp}")
     
-    prov_override: Provider | None = (
-        cast(Provider, provider.lower()) if provider else None
-    )
+    prov_override = cast(Provider, provider.lower()) if provider else None
     config = load_config(
         output_dir=output,
         api_key_override=api_key,
@@ -338,36 +417,43 @@ def main(
             proxy=config.proxy,
             model=config.model,
             max_concurrent=config.max_concurrent,
+            management_api_key=config.openrouter_management_api_key,
         )
     generator = SlideImageGenerator(client=client)
 
     async def run() -> None:
-        if style_paths is None:
-            # When no style is provided, generate first slide only
-            # Check if page filter conflicts
-            if page_numbers is not None and 1 not in page_numbers:
-                click.echo("No pages to generate (first slide mode, but page 1 not in filter)")
-                return
-            paths = await generator.generate_first_slide_images(
-                outline=outline_text,
-                copy=copy,
-                output_dir=output,
-                article_pdfs=article_pdfs if article_pdfs else None,
-                article_texts=article_texts if article_texts else None,
-            )
-            click.echo(f"Done. Saved {len(paths)} image(s) and PDF to {output.resolve()}")
-        else:
-            by_slide = await generator.generate_all_slide_images(
-                outline=outline_text,
-                style_image_paths=style_paths,
-                copy=copy,
-                output_dir=output,
-                article_pdfs=article_pdfs if article_pdfs else None,
-                article_texts=article_texts if article_texts else None,
-                page_filter=page_numbers,
-            )
-            total = sum(len(paths) for paths in by_slide.values())
-            click.echo(f"Done. Saved {total} image(s) and PDF to {output.resolve()}")
+        try:
+            if style_paths is None:
+                # When no style is provided, generate first slide only
+                # Check if page filter conflicts
+                if page_numbers is not None and 1 not in page_numbers:
+                    click.echo(
+                        "No pages to generate (first slide mode, but page 1 not in filter)"
+                    )
+                    return
+                paths = await generator.generate_first_slide_images(
+                    outline=outline_text,
+                    copy=copy,
+                    output_dir=output,
+                    article_pdfs=article_pdfs if article_pdfs else None,
+                    article_texts=article_texts if article_texts else None,
+                )
+                click.echo(f"Done. Saved {len(paths)} image(s) and PDF to {output.resolve()}")
+            else:
+                by_slide = await generator.generate_all_slide_images(
+                    outline=outline_text,
+                    style_image_paths=style_paths,
+                    copy=copy,
+                    output_dir=output,
+                    article_pdfs=article_pdfs if article_pdfs else None,
+                    article_texts=article_texts if article_texts else None,
+                    page_filter=page_numbers,
+                )
+                total = sum(len(paths) for paths in by_slide.values())
+                click.echo(f"Done. Saved {total} image(s) and PDF to {output.resolve()}")
+        finally:
+            if config.provider == "openrouter" and not no_balance:
+                await _echo_openrouter_account_credits(cast(OpenRouterClient, client))
 
     asyncio.run(run())
 

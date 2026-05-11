@@ -7,15 +7,15 @@ import base64
 import json
 import logging
 import re
-from typing import Any, Final
+from typing import Any, Final, NamedTuple
 
 import httpx
 from tqdm import tqdm
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
-    wait_fixed,
+    wait_exponential_jitter,
     before_sleep_log,
 )
 
@@ -24,12 +24,56 @@ logger = logging.getLogger(__name__)
 
 # Constants
 DEFAULT_MODEL: Final[str] = "google/gemini-3.1-flash-image-preview"
-DEFAULT_MAX_CONCURRENT: Final[int] = 36
-DEFAULT_TIMEOUT: Final[float] = 120.0
-DEFAULT_RETRY_ATTEMPTS: Final[int] = 3
-DEFAULT_RETRY_WAIT: Final[int] = 1
+DEFAULT_MAX_CONCURRENT: Final[int] = 12
+DEFAULT_IMAGE_CONNECT_TIMEOUT: Final[float] = 30.0
+DEFAULT_IMAGE_READ_TIMEOUT: Final[float] = 300.0
+DEFAULT_IMAGE_WRITE_TIMEOUT: Final[float] = 60.0
+DEFAULT_IMAGE_POOL_TIMEOUT: Final[float] = 30.0
+DEFAULT_CREDITS_TIMEOUT: Final[float] = 30.0
+DEFAULT_RETRY_ATTEMPTS: Final[int] = 5
+DEFAULT_RETRY_WAIT_INITIAL: Final[float] = 1.0
+DEFAULT_RETRY_WAIT_MAX: Final[float] = 20.0
+RETRYABLE_HTTP_STATUS_CODES: Final[frozenset[int]] = frozenset({408, 409, 425, 429})
 DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)")
 DEFAULT_VOLCENGINE_BASE: Final[str] = "https://ark.cn-beijing.volces.com/api/v3"
+
+
+def _image_timeout() -> httpx.Timeout:
+    """Use long read timeouts for image generation without hiding connect stalls."""
+    return httpx.Timeout(
+        connect=DEFAULT_IMAGE_CONNECT_TIMEOUT,
+        read=DEFAULT_IMAGE_READ_TIMEOUT,
+        write=DEFAULT_IMAGE_WRITE_TIMEOUT,
+        pool=DEFAULT_IMAGE_POOL_TIMEOUT,
+    )
+
+
+def _credits_timeout() -> httpx.Timeout:
+    """Credits calls are lightweight, so keep their total budget short."""
+    return httpx.Timeout(DEFAULT_CREDITS_TIMEOUT, connect=10.0, pool=10.0)
+
+
+def _is_retryable_exception(exc: BaseException) -> bool:
+    """Retry transient API failures, but fail fast for permanent client errors."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status >= 500 or status in RETRYABLE_HTTP_STATUS_CODES
+    return isinstance(
+        exc,
+        (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            ValueError,
+            json.JSONDecodeError,
+        ),
+    )
+
+
+class CreditsFetchOutcome(NamedTuple):
+    """Result of ``GET /credits`` — either balances or a short failure reason for the CLI."""
+
+    credits: dict[str, float] | None
+    error: str | None = None
 
 
 def _image_bytes_to_data_url(image_bytes: bytes) -> str:
@@ -55,8 +99,10 @@ class OpenRouterClient:
         proxy: str | None = None,
         model: str = DEFAULT_MODEL,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+        management_api_key: str | None = None,
     ) -> None:
         self.api_key = api_key
+        self._management_api_key = (management_api_key or "").strip() or None
         self._proxy = proxy
         self._model = model
         self.max_concurrent = max_concurrent
@@ -137,6 +183,68 @@ class OpenRouterClient:
         except (KeyError, IndexError, TypeError) as e:
             raise ValueError(f"Failed to extract image from response: {e}") from e
 
+    def _credits_http_error_detail(self, response: httpx.Response) -> str:
+        detail = f"HTTP {response.status_code}"
+        try:
+            body = response.json()
+            if isinstance(body, dict):
+                err = body.get("error")
+                if isinstance(err, dict) and err.get("message") is not None:
+                    return f"{detail}: {err['message']}"
+        except (ValueError, TypeError):
+            pass
+        text = (response.text or "").strip()
+        if text:
+            tail = text if len(text) <= 200 else text[:200] + "…"
+            return f"{detail} ({tail})"
+        return detail
+
+    async def fetch_credits(self) -> CreditsFetchOutcome:
+        """GET ``/credits`` — purchased vs used totals (remaining is their difference).
+
+        OpenRouter expects a Management API key for this route; pass ``management_api_key``
+        when constructing the client if your model ``api_key`` is not allowed on ``/credits``.
+        """
+        credits_key = self._management_api_key or self.api_key
+        try:
+            async with httpx.AsyncClient(
+                proxy=self._proxy,
+                timeout=_credits_timeout(),
+            ) as http:
+                response = await http.get(
+                    f"{self.BASE_URL}/credits",
+                    headers={"Authorization": f"Bearer {credits_key}"},
+                )
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError:
+                    return CreditsFetchOutcome(
+                        None, self._credits_http_error_detail(response)
+                    )
+                payload = response.json()
+                data = payload.get("data")
+                if not isinstance(data, dict):
+                    return CreditsFetchOutcome(
+                        None, "Invalid response: missing or invalid \"data\" object"
+                    )
+                raw_tc = data.get("total_credits")
+                raw_tu = data.get("total_usage")
+                if raw_tc is None or raw_tu is None:
+                    return CreditsFetchOutcome(
+                        None, "Invalid response: total_credits or total_usage missing"
+                    )
+                return CreditsFetchOutcome(
+                    {
+                        "total_credits": float(raw_tc),
+                        "total_usage": float(raw_tu),
+                    },
+                    None,
+                )
+        except httpx.HTTPError as e:
+            return CreditsFetchOutcome(None, str(e) or type(e).__name__)
+        except (ValueError, TypeError) as e:
+            return CreditsFetchOutcome(None, f"Invalid response: {e}")
+
     async def _generate_single_image(
         self,
         client: httpx.AsyncClient,
@@ -163,17 +271,13 @@ class OpenRouterClient:
         """
         @retry(
             stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
-            wait=wait_fixed(DEFAULT_RETRY_WAIT),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
-            retry=retry_if_exception_type(
-                (
-                    httpx.HTTPStatusError,
-                    httpx.ConnectError,
-                    httpx.TimeoutException,
-                    ValueError,
-                    json.JSONDecodeError,
-                )
+            wait=wait_exponential_jitter(
+                initial=DEFAULT_RETRY_WAIT_INITIAL,
+                max=DEFAULT_RETRY_WAIT_MAX,
             ),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            retry=retry_if_exception(_is_retryable_exception),
+            reraise=True,
         )
         async def _do_request() -> bytes:
             async with self.semaphore:
@@ -216,7 +320,7 @@ class OpenRouterClient:
         )
         async with httpx.AsyncClient(
             proxy=self._proxy,
-            timeout=DEFAULT_TIMEOUT,
+            timeout=_image_timeout(),
             limits=limits,
         ) as client:
             with tqdm(total=total, desc="API calls", unit="call") as pbar:
@@ -339,17 +443,13 @@ class VolcengineClient:
     ) -> bytes:
         @retry(
             stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
-            wait=wait_fixed(DEFAULT_RETRY_WAIT),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
-            retry=retry_if_exception_type(
-                (
-                    httpx.HTTPStatusError,
-                    httpx.ConnectError,
-                    httpx.TimeoutException,
-                    ValueError,
-                    json.JSONDecodeError,
-                )
+            wait=wait_exponential_jitter(
+                initial=DEFAULT_RETRY_WAIT_INITIAL,
+                max=DEFAULT_RETRY_WAIT_MAX,
             ),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            retry=retry_if_exception(_is_retryable_exception),
+            reraise=True,
         )
         async def _do_request() -> bytes:
             async with self.semaphore:
@@ -394,7 +494,7 @@ class VolcengineClient:
         )
         async with httpx.AsyncClient(
             proxy=self._proxy,
-            timeout=DEFAULT_TIMEOUT,
+            timeout=_image_timeout(),
             limits=limits,
         ) as client:
             with tqdm(total=total, desc="API calls", unit="call") as pbar:

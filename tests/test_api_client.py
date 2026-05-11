@@ -1,6 +1,46 @@
 import pytest
 import httpx
-from src.api_client import OpenRouterClient, VolcengineClient
+from src.api_client import (
+    OpenRouterClient,
+    VolcengineClient,
+    _credits_timeout,
+    _image_timeout,
+    _is_retryable_exception,
+)
+
+
+def _status_error(status_code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", "https://example.test/images")
+    response = httpx.Response(status_code, request=request)
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        response.raise_for_status()
+    return exc_info.value
+
+
+def test_image_timeout_uses_phase_specific_budget() -> None:
+    timeout = _image_timeout()
+    assert timeout.connect == 30.0
+    assert timeout.read == 300.0
+    assert timeout.write == 60.0
+    assert timeout.pool == 30.0
+
+
+def test_credits_timeout_keeps_short_read_budget() -> None:
+    timeout = _credits_timeout()
+    assert timeout.connect == 10.0
+    assert timeout.read == 30.0
+    assert timeout.write == 30.0
+    assert timeout.pool == 10.0
+
+
+def test_retry_predicate_skips_permanent_http_errors() -> None:
+    assert not _is_retryable_exception(_status_error(400))
+    assert not _is_retryable_exception(_status_error(401))
+    assert not _is_retryable_exception(_status_error(403))
+    assert _is_retryable_exception(_status_error(429))
+    assert _is_retryable_exception(_status_error(500))
+    assert _is_retryable_exception(httpx.ConnectError("connect failed"))
+    assert _is_retryable_exception(httpx.ReadTimeout("read timed out"))
 
 @pytest.mark.asyncio
 async def test_extract_image_success(client, mock_api_response, mock_image_bytes):
@@ -26,6 +66,62 @@ async def test_generate_single_image_mocked(client, mock_api_response, mock_imag
         )
     
     assert result == mock_image_bytes
+
+
+@pytest.mark.asyncio
+async def test_generate_single_image_does_not_retry_permanent_http_error(
+    client, respx_mock
+) -> None:
+    route = respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(400, json={"error": {"message": "bad request"}})
+    )
+
+    async with httpx.AsyncClient() as http_client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await client._generate_single_image(http_client, prompt="test prompt")
+
+    assert len(route.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_credits_mocked(client, respx_mock):
+    respx_mock.get(f"{client.BASE_URL}/credits").mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": {"total_credits": 10.5, "total_usage": 3.25}},
+        )
+    )
+    out = await client.fetch_credits()
+    assert out.credits == {"total_credits": 10.5, "total_usage": 3.25}
+    assert out.error is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_credits_prefers_management_api_key(respx_mock):
+    route = respx_mock.get(f"{OpenRouterClient.BASE_URL}/credits").mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": {"total_credits": 1.0, "total_usage": 0.5}},
+        )
+    )
+    client = OpenRouterClient(
+        api_key="infer-key",
+        management_api_key="mgmt-key",
+    )
+    await client.fetch_credits()
+    assert route.calls
+    auth = route.calls[0].request.headers.get("authorization", "")
+    assert auth == "Bearer mgmt-key"
+
+
+@pytest.mark.asyncio
+async def test_fetch_credits_http_error_returns_outcome(client, respx_mock):
+    respx_mock.get(f"{client.BASE_URL}/credits").mock(return_value=httpx.Response(403))
+    out = await client.fetch_credits()
+    assert out.credits is None
+    assert out.error is not None
+    assert "403" in out.error
+
 
 @pytest.mark.asyncio
 async def test_generate_images_parallel_mocked(client, mock_api_response, mock_image_bytes, respx_mock):

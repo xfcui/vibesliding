@@ -1,7 +1,11 @@
+import httpx
 import pytest
 import click
 from pathlib import Path
-from src.cli import parse_page_spec, expand_article_paths, expand_style_paths
+from click.testing import CliRunner
+
+from src.api_client import OpenRouterClient
+from src.cli import main, parse_page_spec, expand_article_paths, expand_style_paths
 
 def test_parse_page_spec_single():
     assert parse_page_spec("1") == {1}
@@ -73,3 +77,58 @@ def test_expand_style_paths_invalid_extension(tmp_path):
     gif.write_bytes(b"g")
     with pytest.raises(click.UsageError, match="Unsupported style"):
         expand_style_paths([str(gif)])
+
+
+def test_balance_only_prints_openrouter_credits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, respx_mock
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "max_concurrent = 1\nprovider = openrouter\n\n"
+        "[openrouter]\napi_key = sk-t\nmodel = m\n",
+        encoding="utf-8",
+    )
+    respx_mock.get(f"{OpenRouterClient.BASE_URL}/credits").mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": {"total_credits": 10.0, "total_usage": 2.0}},
+        )
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["--balance-only"])
+    assert result.exit_code == 0
+    assert "OpenRouter credits" in result.output
+    assert "8" in result.output
+
+
+def test_balance_only_rejects_outline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "max_concurrent = 1\nprovider = openrouter\n\n"
+        "[openrouter]\napi_key = sk-t\nmodel = m\n",
+        encoding="utf-8",
+    )
+    outline = tmp_path / "o.md"
+    outline.write_text("# x\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["--balance-only", "--outline", str(outline)])
+    assert result.exit_code != 0
+
+
+def test_balance_only_rejects_no_balance() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["--balance-only", "--no-balance"])
+    assert result.exit_code != 0
+
+
+def test_missing_outline_shows_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "max_concurrent = 1\nprovider = openrouter\n\n"
+        "[openrouter]\napi_key = sk-t\nmodel = m\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, [])
+    assert result.exit_code != 0
+    assert "--outline" in result.output.lower() or "outline" in result.output.lower()

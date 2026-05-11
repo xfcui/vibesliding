@@ -53,6 +53,8 @@ class Config:
     volcengine_response_format: str = "url"
     volcengine_watermark: bool = True
     volcengine_proxy: str | None = None
+    # Optional; GET /credits typically requires an OpenRouter Management API key.
+    openrouter_management_api_key: str | None = None
 
     def validate(self) -> None:
         """Validate configuration parameters.
@@ -97,6 +99,7 @@ def _int_from_section(section: dict[str, str], key: str) -> int | None:
 def _load_openrouter_from_parser(parser: ConfigParser) -> dict[str, str | int | None]:
     out: dict[str, str | int | None] = {
         "api_key": None,
+        "management_api_key": None,
         "proxy": None,
         "model": None,
         "max_concurrent": None,
@@ -105,7 +108,7 @@ def _load_openrouter_from_parser(parser: ConfigParser) -> dict[str, str | int | 
     if not parser.has_section(OPENROUTER_SECTION):
         return out
     section = parser[OPENROUTER_SECTION]
-    for key in ("api_key", "proxy", "model", "use_proxy"):
+    for key in ("api_key", "management_api_key", "proxy", "model", "use_proxy"):
         value = section.get(key, "").strip()
         if value:
             out[key] = value
@@ -208,9 +211,11 @@ def load_config(
     """Load and validate full configuration.
 
     Priority:
-    - provider: CLI ``--provider`` > IMAGE_PROVIDER env > preamble ``provider`` (**default:
-      volcengine** — direct to Ark, no proxy unless enabled in ``[volcengine]``).
+    - provider: CLI ``--provider`` > IMAGE_PROVIDER env > preamble ``provider`` (required
+      if not set via those sources — set keys/model under ``[openrouter]``, proxy follows ``use_proxy``).
     - api_key: Uses OpenRouter or Volcengine env/section based on provider
+    - openrouter_management_api_key (optional): ``OPENROUTER_MANAGEMENT_API_KEY`` or
+      ``[openrouter] management_api_key`` — used only for ``GET /credits`` (Management key).
     - proxy (OpenRouter): CLI > OPENROUTER_PROXY env > [openrouter] proxy > preamble ``proxy``,
       unless ``use_proxy`` is false in ``[openrouter]`` (or OPENROUTER_USE_PROXY=0).
     - proxy (Volcengine): optional — ``VOLCENGINE_PROXY`` env > ``[volcengine]`` proxy > preamble,
@@ -238,11 +243,14 @@ def load_config(
     if not prov:
         prov = _default_provider(parser)
     if not prov:
-        prov = "volcengine"
+        raise ValueError(
+            "Provider is required. Set --provider, IMAGE_PROVIDER, or "
+            "provider in .env (preamble before first [section])."
+        )
     if prov not in ("openrouter", "volcengine"):
         raise ValueError(
             f"Invalid provider {prov!r}. Use 'openrouter' or 'volcengine' "
-            "(IMAGE_PROVIDER or [DEFAULT] provider in .env)."
+            "(--provider, IMAGE_PROVIDER, or provider in .env preamble)."
         )
     provider: Provider = prov  # type: ignore[assignment]
 
@@ -299,6 +307,13 @@ def load_config(
                 "max_concurrent is required (>= 1). Set it in [DEFAULT] or [openrouter] "
                 "max_concurrent or OPENROUTER_MAX_CONCURRENT."
             )
+        mgmt_env = (os.getenv("OPENROUTER_MANAGEMENT_API_KEY") or "").strip()
+        mgmt_file = raw.get("management_api_key")
+        mgmt_key = mgmt_env or (
+            mgmt_file.strip()
+            if isinstance(mgmt_file, str) and mgmt_file.strip()
+            else None
+        )
         return Config(
             provider=provider,
             api_key=api_key,
@@ -306,6 +321,7 @@ def load_config(
             model=str(model),
             max_concurrent=int(max_concurrent),
             output_dir=output_dir or Path("./output"),
+            openrouter_management_api_key=mgmt_key,
         )
 
     # Volcengine: proxy optional (see use_proxy / VOLCENGINE_PROXY).

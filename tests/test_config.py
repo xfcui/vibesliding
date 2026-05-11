@@ -20,16 +20,29 @@ def test_normalize_noop_when_first_line_is_section() -> None:
     assert _normalize_ini_for_configparser(raw) == raw
 
 
-def test_default_provider_is_volcengine_when_unspecified(tmp_path: Path) -> None:
+def test_provider_required_when_unspecified(tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text(
         "max_concurrent = 1\n\n"
-        "[volcengine]\napi_key = k\nmodel = doubao-test\n",
+        "[openrouter]\napi_key = sk-test\nmodel = google/test-model\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Provider is required"):
+        load_config(config_path=env, output_dir=tmp_path / "o")
+
+
+def test_openrouter_loads_when_provider_in_preamble(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text(
+        "provider = openrouter\n"
+        "max_concurrent = 1\n\n"
+        "[openrouter]\napi_key = sk-test\nmodel = google/test-model\n",
         encoding="utf-8",
     )
     c = load_config(config_path=env, output_dir=tmp_path / "o")
-    assert c.provider == "volcengine"
-    assert c.volcengine_proxy is None
+    assert c.provider == "openrouter"
+    assert c.api_key == "sk-test"
+    assert c.model == "google/test-model"
 
 
 def test_load_volcengine_from_tmp(tmp_path: Path) -> None:
