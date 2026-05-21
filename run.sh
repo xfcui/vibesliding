@@ -46,10 +46,10 @@ echo ""
 echo "🚀 Generating slides..."
 echo ""
 
-# Run the CLI with all arguments passed to this script
+# Article references and slide-specific image references are declared in examples/outline.md.
+# Run the CLI with all arguments passed to this script.
 python -m src.cli \
   --outline examples/outline.md \
-  --article "examples/*.pdf" \
   --style "examples/style_*.png" \
   --copy 4 \
   "$@"

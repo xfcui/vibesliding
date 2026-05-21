@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 import glob as glob_module
 from pathlib import Path
+import re
 from typing import Final, cast
 
 import click
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 from src.api_client import OpenRouterClient, VolcengineClient
 from src.config import Provider, load_config
 from src.generator import SlideImageGenerator
+from src.output import rebuild_combined_pdf
 
 load_dotenv()
 
@@ -25,6 +27,10 @@ SUPPORTED_STYLE_EXTENSIONS: Final[set[str]] = {
     ".jpeg",
     ".webp",
 }
+ARTICLE_TAG_PATTERN: Final[re.Pattern] = re.compile(
+    r"\[(?:Articles?|Text\s+References?|Source\s+References?)\s*:\s*(.*?)\]",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def parse_page_spec(page_spec: str | None) -> set[int] | None:
@@ -85,11 +91,44 @@ def parse_page_spec(page_spec: str | None) -> set[int] | None:
     return pages if pages else None
 
 
-def expand_article_paths(patterns: list[str]) -> list[Path]:
+def _clean_path_pattern(pattern: str) -> str:
+    """Normalize outline/CLI path patterns while preserving spaces in filenames."""
+    pattern = pattern.strip().strip("\"'")
+    return pattern[1:] if pattern.startswith("@") else pattern
+
+
+def extract_article_patterns_from_outline(outline_text: str) -> list[str]:
+    """Extract article reference path/glob patterns declared in the outline."""
+    patterns: list[str] = []
+    for match in ARTICLE_TAG_PATTERN.finditer(outline_text):
+        raw = match.group(1).replace("\n", ",")
+        patterns.extend(
+            _clean_path_pattern(segment)
+            for segment in raw.split(",")
+            if _clean_path_pattern(segment)
+        )
+    return patterns
+
+
+def _candidate_patterns(pattern: str, base_dir: Path | None) -> list[str]:
+    """Return cwd and outline-relative candidates for a path/glob pattern."""
+    pattern = _clean_path_pattern(pattern)
+    path = Path(pattern).expanduser()
+    candidates = [str(path)]
+    if not path.is_absolute() and base_dir is not None:
+        candidates.extend([str(base_dir / pattern), str(base_dir.parent / pattern)])
+    return candidates
+
+
+def expand_article_paths(
+    patterns: list[str],
+    base_dir: Path | None = None,
+) -> list[Path]:
     """Expand glob patterns and validate article file paths.
     
     Args:
         patterns: List of file paths or glob patterns
+        base_dir: Optional outline directory used to resolve outline-declared paths
         
     Returns:
         List of valid article file paths
@@ -100,19 +139,24 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
     all_paths: list[Path] = []
     
     for pattern in patterns:
+        pattern = _clean_path_pattern(pattern)
+        if not pattern:
+            continue
         # Check if pattern contains glob wildcards
         if any(char in pattern for char in ['*', '?', '[', ']']):
             # Use glob to expand pattern
-            matched = glob_module.glob(pattern)
+            matched: list[str] = []
+            for candidate in _candidate_patterns(pattern, base_dir):
+                matched.extend(glob_module.glob(candidate))
             if not matched:
                 raise click.UsageError(f"No files found matching pattern: {pattern}")
             all_paths.extend([Path(p) for p in matched])
         else:
             # Regular file path
-            path = Path(pattern)
-            if not path.exists():
+            matches = [Path(p) for p in _candidate_patterns(pattern, base_dir) if Path(p).exists()]
+            if not matches:
                 raise click.UsageError(f"Article file not found: {pattern}")
-            all_paths.append(path)
+            all_paths.append(matches[0])
     
     # Validate all files
     for path in all_paths:
@@ -127,7 +171,15 @@ def expand_article_paths(patterns: list[str]) -> list[Path]:
                 f"Supported: {ext_list}"
             )
     
-    return all_paths
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in all_paths:
+        rp = path.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            unique.append(path)
+
+    return unique
 
 
 def expand_style_paths(patterns: list[str]) -> list[Path]:
@@ -275,6 +327,24 @@ async def _echo_openrouter_account_credits(client: OpenRouterClient) -> None:
     default=False,
     help="Skip printing OpenRouter credits after a successful run.",
 )
+@click.option(
+    "--pdf-only",
+    is_flag=True,
+    default=False,
+    help=(
+        "Rebuild slide_combined.pdf from existing slide_p##_v##.png files "
+        "in --output (no API calls; --outline not required)."
+    ),
+)
+@click.option(
+    "--variant",
+    type=str,
+    default=None,
+    help=(
+        "With --pdf-only: include only these variant numbers "
+        "(e.g. '1' or '1,2'). Default: all variants present in --output."
+    ),
+)
 def main(
     outline: Path | None,
     style: tuple[str, ...],
@@ -287,12 +357,43 @@ def main(
     provider: str | None,
     balance_only: bool,
     no_balance: bool,
+    pdf_only: bool,
+    variant: str | None,
 ) -> None:
     """Generate slide images from markdown outline. Without --style: first slide only. With --style: all slides in that style."""
     if balance_only and no_balance:
         raise click.UsageError("--balance-only cannot be used together with --no-balance.")
     if balance_only and outline is not None:
         raise click.UsageError("--outline cannot be used with --balance-only.")
+    if pdf_only and balance_only:
+        raise click.UsageError("--pdf-only cannot be used with --balance-only.")
+    if pdf_only and output is None:
+        raise click.UsageError("--pdf-only requires --output (existing output directory).")
+
+    if pdf_only:
+        try:
+            page_numbers = parse_page_spec(page)
+        except ValueError as e:
+            raise click.UsageError(str(e)) from e
+        try:
+            variant_numbers = parse_page_spec(variant)
+        except ValueError as e:
+            raise click.UsageError(str(e)) from e
+
+        try:
+            pdf_path, image_count = rebuild_combined_pdf(
+                output,
+                page_filter=page_numbers,
+                variant_filter=variant_numbers,
+            )
+        except ValueError as e:
+            raise click.UsageError(str(e)) from e
+
+        click.echo(
+            f"Created {pdf_path.name} ({image_count} page(s)) in {output.resolve()}"
+        )
+        return
+
     if not balance_only and outline is None:
         raise click.UsageError("Missing option '--outline'.")
 
@@ -353,13 +454,17 @@ def main(
     except ValueError as e:
         raise click.UsageError(str(e)) from e
 
+    outline_text = outline.read_text(encoding="utf-8")
+    outline_article_patterns = extract_article_patterns_from_outline(outline_text)
+    article_patterns = list(article or ()) + outline_article_patterns
+
     # Load article content if provided
     article_pdfs: list[bytes] = []
     article_texts: list[str] = []
     article_paths: list[Path] = []
     
-    if article:
-        article_paths = expand_article_paths(list(article))
+    if article_patterns:
+        article_paths = expand_article_paths(article_patterns, base_dir=outline.parent)
         
         for path in article_paths:
             suffix = path.suffix.lower()
@@ -398,7 +503,6 @@ def main(
     click.echo("  |  ".join(info_parts))
 
     # Initialize components
-    outline_text = outline.read_text(encoding="utf-8")
     assert config.api_key is not None  # validated
     if config.provider == "volcengine":
         client = VolcengineClient(
@@ -437,6 +541,7 @@ def main(
                     output_dir=output,
                     article_pdfs=article_pdfs if article_pdfs else None,
                     article_texts=article_texts if article_texts else None,
+                    outline_dir=outline.parent,
                 )
                 click.echo(f"Done. Saved {len(paths)} image(s) and PDF to {output.resolve()}")
             else:
@@ -448,6 +553,7 @@ def main(
                     article_pdfs=article_pdfs if article_pdfs else None,
                     article_texts=article_texts if article_texts else None,
                     page_filter=page_numbers,
+                    outline_dir=outline.parent,
                 )
                 total = sum(len(paths) for paths in by_slide.values())
                 click.echo(f"Done. Saved {total} image(s) and PDF to {output.resolve()}")

@@ -22,9 +22,15 @@ from tenacity import (
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Constants
-DEFAULT_MODEL: Final[str] = "google/gemini-3.1-flash-image-preview"
+# Constants (OpenRouter defaults align with .env.example / README; retries & HTTP phases are shared with Volcengine.)
+DEFAULT_MODEL: Final[str] = "google/gemini-3-pro-image-preview"
+DEFAULT_OPENROUTER_BASE: Final[str] = "https://openrouter.ai/api/v1"
+DEFAULT_VOLCENGINE_BASE: Final[str] = "https://ark.cn-beijing.volces.com/api/v3"
+
 DEFAULT_MAX_CONCURRENT: Final[int] = 12
+# Minimum spacing between successive API calls — caps the request start rate at
+# 3 calls/second across all in-flight tasks (including retries) for each client.
+DEFAULT_MIN_REQUEST_INTERVAL: Final[float] = 1.0 / 3.0
 DEFAULT_IMAGE_CONNECT_TIMEOUT: Final[float] = 30.0
 DEFAULT_IMAGE_READ_TIMEOUT: Final[float] = 300.0
 DEFAULT_IMAGE_WRITE_TIMEOUT: Final[float] = 60.0
@@ -32,10 +38,13 @@ DEFAULT_IMAGE_POOL_TIMEOUT: Final[float] = 30.0
 DEFAULT_CREDITS_TIMEOUT: Final[float] = 30.0
 DEFAULT_RETRY_ATTEMPTS: Final[int] = 5
 DEFAULT_RETRY_WAIT_INITIAL: Final[float] = 1.0
-DEFAULT_RETRY_WAIT_MAX: Final[float] = 20.0
+DEFAULT_RETRY_WAIT_MAX: Final[float] = 60.0
 RETRYABLE_HTTP_STATUS_CODES: Final[frozenset[int]] = frozenset({408, 409, 425, 429})
 DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)")
-DEFAULT_VOLCENGINE_BASE: Final[str] = "https://ark.cn-beijing.volces.com/api/v3"
+
+# OpenRouter image_config (see https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
+SLIDE_ASPECT_RATIO: Final[str] = "16:9"
+SLIDE_IMAGE_SIZE: Final[str] = "2K"
 
 
 def _image_timeout() -> httpx.Timeout:
@@ -69,6 +78,41 @@ def _is_retryable_exception(exc: BaseException) -> bool:
     )
 
 
+class AsyncRateLimiter:
+    """Async rate limiter enforcing a minimum interval between successive acquisitions.
+
+    Calls to :meth:`acquire` are serialized via an internal lock and each call
+    schedules the next admissible time, so concurrent waiters are released in a
+    fair, evenly-spaced sequence regardless of how many tasks pile up.
+    """
+
+    def __init__(self, min_interval: float) -> None:
+        if min_interval < 0:
+            raise ValueError("min_interval must be non-negative")
+        self._min_interval = min_interval
+        self._next_available: float = 0.0
+        self._lock: asyncio.Lock | None = None
+
+    @property
+    def _bound_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def acquire(self) -> None:
+        if self._min_interval <= 0:
+            return
+        async with self._bound_lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            wait_for = self._next_available - now
+            if wait_for > 0:
+                self._next_available = now + wait_for + self._min_interval
+                await asyncio.sleep(wait_for)
+            else:
+                self._next_available = now + self._min_interval
+
+
 class CreditsFetchOutcome(NamedTuple):
     """Result of ``GET /credits`` — either balances or a short failure reason for the CLI."""
 
@@ -91,7 +135,7 @@ def _image_bytes_to_data_url(image_bytes: bytes) -> str:
 class OpenRouterClient:
     """Async client for OpenRouter image generation with optional proxy and retry."""
 
-    BASE_URL: Final[str] = "https://openrouter.ai/api/v1"
+    BASE_URL: Final[str] = DEFAULT_OPENROUTER_BASE
 
     def __init__(
         self,
@@ -100,6 +144,7 @@ class OpenRouterClient:
         model: str = DEFAULT_MODEL,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
         management_api_key: str | None = None,
+        min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
     ) -> None:
         self.api_key = api_key
         self._management_api_key = (management_api_key or "").strip() or None
@@ -107,6 +152,7 @@ class OpenRouterClient:
         self._model = model
         self.max_concurrent = max_concurrent
         self._semaphore: asyncio.Semaphore | None = None
+        self._rate_limiter = AsyncRateLimiter(min_request_interval)
 
     @property
     def semaphore(self) -> asyncio.Semaphore:
@@ -280,6 +326,7 @@ class OpenRouterClient:
             reraise=True,
         )
         async def _do_request() -> bytes:
+            await self._rate_limiter.acquire()
             async with self.semaphore:
                 payload = {
                     "model": self._model,
@@ -287,6 +334,10 @@ class OpenRouterClient:
                         prompt, system_prompt, reference_images, assistant_context
                     ),
                     "modalities": ["image", "text"],
+                    "image_config": {
+                        "aspect_ratio": SLIDE_ASPECT_RATIO,
+                        "image_size": SLIDE_IMAGE_SIZE,
+                    },
                 }
                 response = await client.post(
                     f"{self.BASE_URL}/chat/completions",
@@ -377,6 +428,7 @@ class VolcengineClient:
         response_format: str = "url",
         watermark: bool = True,
         proxy: str | None = None,
+        min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
     ) -> None:
         self.api_key = api_key
         self._model = model
@@ -390,6 +442,7 @@ class VolcengineClient:
         self._watermark = watermark
         self._proxy = proxy
         self._semaphore: asyncio.Semaphore | None = None
+        self._rate_limiter = AsyncRateLimiter(min_request_interval)
 
     @property
     def semaphore(self) -> asyncio.Semaphore:
@@ -452,6 +505,7 @@ class VolcengineClient:
             reraise=True,
         )
         async def _do_request() -> bytes:
+            await self._rate_limiter.acquire()
             async with self.semaphore:
                 merged = self._merge_prompt(
                     prompt, system_prompt, assistant_context

@@ -5,7 +5,15 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from src.api_client import OpenRouterClient
-from src.cli import main, parse_page_spec, expand_article_paths, expand_style_paths
+from PIL import Image
+
+from src.cli import (
+    main,
+    parse_page_spec,
+    expand_article_paths,
+    expand_style_paths,
+    extract_article_patterns_from_outline,
+)
 
 def test_parse_page_spec_single():
     assert parse_page_spec("1") == {1}
@@ -46,6 +54,36 @@ def test_expand_article_paths(tmp_path):
     
     # Test multiple
     assert set(expand_article_paths([str(f1), str(f2)])) == {f1, f2}
+
+
+def test_extract_article_patterns_from_outline_preserves_spaces():
+    md = """
+# Deck
+
+[Articles:
+@examples/Exploring Cursor AI Coding Assistant.md,
+"examples/OpenClaw Success and Implementation.md"
+]
+
+## Slide 1: Intro
+Content
+"""
+    assert extract_article_patterns_from_outline(md) == [
+        "examples/Exploring Cursor AI Coding Assistant.md",
+        "examples/OpenClaw Success and Implementation.md",
+    ]
+
+
+def test_expand_article_paths_resolves_outline_relative_paths(tmp_path):
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    outline_dir = examples
+    article_path = examples / "Research Notes.md"
+    article_path.write_text("# notes", encoding="utf-8")
+
+    assert expand_article_paths(["Research Notes.md"], base_dir=outline_dir) == [
+        article_path
+    ]
 
 def test_expand_article_paths_invalid(tmp_path):
     f = tmp_path / "test.txt"
@@ -132,3 +170,27 @@ def test_missing_outline_shows_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     result = runner.invoke(main, [])
     assert result.exit_code != 0
     assert "--outline" in result.output.lower() or "outline" in result.output.lower()
+
+
+def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
+    out = tmp_path / "output_test"
+    out.mkdir()
+    for name in ("slide_p01_v01.png", "slide_p01_v02.png", "slide_p02_v01.png"):
+        Image.new("RGB", (40, 40), color="green").save(out / name)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["--pdf-only", "--output", str(out), "--variant", "1"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "slide_combined.pdf" in result.output
+    assert "2 page" in result.output
+    assert (out / "slide_combined.pdf").exists()
+
+
+def test_pdf_only_requires_output(tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["--pdf-only"])
+    assert result.exit_code != 0
+    assert "--output" in result.output

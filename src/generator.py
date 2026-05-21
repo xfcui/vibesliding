@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import glob as glob_module
 import re
+import shlex
 from pathlib import Path
 from typing import Final
 
@@ -17,6 +19,14 @@ STYLE_KEYWORDS: Final[tuple[str, ...]] = (
     "global visual requirements",
     "visual style",
     "design standards",
+)
+REFERENCE_TAG_PATTERN: Final[re.Pattern] = re.compile(
+    r"\[(?:Reference(?:\s+(?:Images?|Photos?))?|"
+    r"Image\s+Reference|Photo\s+Reference|Refs?)\s*:\s*(.*?)\]",
+    re.IGNORECASE | re.DOTALL,
+)
+SUPPORTED_REFERENCE_EXTENSIONS: Final[frozenset[str]] = frozenset(
+    {".png", ".jpg", ".jpeg"}
 )
 
 
@@ -67,14 +77,94 @@ class SlideImageGenerator:
         return None
 
     @staticmethod
+    def _split_reference_patterns(raw_patterns: str) -> list[str]:
+        """Split a reference tag into path/glob patterns.
+
+        The outline syntax is intentionally lightweight:
+        ``[Reference: examples/data.png]`` or
+        ``[Reference: "examples/person 1.png", examples/person_*.png]``.
+        A leading ``@`` is accepted for Cursor-style path references.
+        """
+        patterns: list[str] = []
+        for segment in raw_patterns.replace("\n", ",").split(","):
+            segment = segment.strip()
+            if not segment:
+                continue
+            try:
+                parts = shlex.split(segment)
+            except ValueError:
+                parts = segment.split()
+            patterns.extend(parts)
+        return [p[1:] if p.startswith("@") else p for p in patterns if p]
+
+    @staticmethod
+    def _extract_reference_patterns(slide: Slide) -> list[str]:
+        """Return slide-scoped reference image path/glob patterns from outline tags."""
+        patterns: list[str] = []
+        for match in REFERENCE_TAG_PATTERN.finditer(slide.content):
+            patterns.extend(SlideImageGenerator._split_reference_patterns(match.group(1)))
+        return patterns
+
+    @staticmethod
+    def _resolve_reference_image_paths(
+        slide: Slide,
+        outline_dir: Path | None = None,
+    ) -> list[Path]:
+        """Resolve slide-scoped reference image tags to concrete image files."""
+        raw_patterns = SlideImageGenerator._extract_reference_patterns(slide)
+        if not raw_patterns:
+            return []
+
+        seen: set[Path] = set()
+        resolved: list[Path] = []
+        for raw_pattern in raw_patterns:
+            candidates = [Path(raw_pattern).expanduser()]
+            if not candidates[0].is_absolute() and outline_dir is not None:
+                candidates.append(outline_dir / raw_pattern)
+                candidates.append(outline_dir.parent / raw_pattern)
+
+            matched: list[Path] = []
+            has_glob = any(char in raw_pattern for char in "*?[]")
+            for candidate in candidates:
+                if has_glob:
+                    matched.extend(Path(p) for p in glob_module.glob(str(candidate)))
+                elif candidate.exists():
+                    matched.append(candidate)
+
+            if not matched:
+                raise ValueError(
+                    f"No reference image found for slide {slide.index}: {raw_pattern}"
+                )
+
+            for path in sorted(matched, key=lambda p: str(p.resolve())):
+                if not path.is_file():
+                    raise ValueError(f"Reference image is not a file: {path}")
+                suffix = path.suffix.lower()
+                if suffix not in SUPPORTED_REFERENCE_EXTENSIONS:
+                    supported = ", ".join(sorted(SUPPORTED_REFERENCE_EXTENSIONS))
+                    raise ValueError(
+                        f"Unsupported reference image format '{suffix}' for {path.name}. "
+                        f"Supported: {supported}"
+                    )
+                rp = path.resolve()
+                if rp not in seen:
+                    seen.add(rp)
+                    resolved.append(path)
+
+        return resolved
+
+    @staticmethod
     def _build_prompt(
         slide: Slide,
         outline_context: str,
         global_style: str | None = None,
         with_style_reference: bool = False,
         with_articles: bool = False,
+        slide_reference_paths: list[Path] | None = None,
+        style_reference_count: int = 0,
     ) -> tuple[str, str]:
         """Build user and system prompts for current slide."""
+        slide_reference_paths = slide_reference_paths or []
         # Extract visual tag if present
         visual_tag = ""
         visual_match = re.search(r"\[Visual:\s*(.*?)\]", slide.content, re.IGNORECASE)
@@ -84,6 +174,7 @@ class SlideImageGenerator:
             clean_content = slide.content.replace(visual_match.group(0), "").strip()
         else:
             clean_content = slide.content
+        clean_content = REFERENCE_TAG_PATTERN.sub("", clean_content).strip()
 
         article_instruction = ""
         if with_articles:
@@ -101,7 +192,7 @@ class SlideImageGenerator:
                 "4. **Content Adaptation**: Preserve the references' LOOK, but replace content with the new text provided below."
             )
         elif global_style:
-             style_instruction = (
+            style_instruction = (
                 f"\n# GLOBAL VISUAL REQUIREMENTS (STRICT ADHERENCE REQUIRED):\n"
                 f"{global_style}\n\n"
                 "- **Consistency**: Ensure this slide matches the defined theme, fonts, and palette exactly."
@@ -114,6 +205,52 @@ class SlideImageGenerator:
                 "- **Graphics**: Modern, flat, or semi-flat vector illustrations. Minimal shadows.\n"
                 "- **Mood**: Professional, trustworthy, clear.\n"
             )
+
+        reference_instruction = ""
+        reference_summary = ""
+        if slide_reference_paths:
+            names = ", ".join(str(p) for p in slide_reference_paths)
+            if style_reference_count > 0:
+                style_range = (
+                    f"1-{style_reference_count}"
+                    if style_reference_count > 1
+                    else "1"
+                )
+                start = style_reference_count + 1
+                end = style_reference_count + len(slide_reference_paths)
+                slide_range = f"{start}-{end}" if start != end else str(start)
+                reference_instruction = (
+                    "\n# ATTACHED IMAGE ROLES\n"
+                    f"- Attached image(s) {style_range}: deck visual style references only.\n"
+                    f"- Attached image(s) {slide_range}: slide-specific photo/content references "
+                    f"for this slide ({names}). Use these to anchor the subject, pose, "
+                    "composition, and recognisable visual details requested by the outline.\n"
+                    "- Do not treat slide-specific photos as global deck style. Do not copy "
+                    "embedded text, watermarks, or accidental background artifacts unless the "
+                    "outline explicitly asks for them.\n"
+                )
+            else:
+                reference_instruction = (
+                    "\n# ATTACHED SLIDE REFERENCE IMAGES\n"
+                    f"The attached image(s) are slide-specific photo/content references "
+                    f"for this slide ({names}). Use them to anchor the subject, pose, "
+                    "composition, and recognisable visual details requested by the outline. "
+                    "Do not copy embedded text, watermarks, or accidental background artifacts "
+                    "unless the outline explicitly asks for them.\n"
+                )
+            reference_summary = (
+                "\n**Attached Slide References**:\n"
+                + "\n".join(f"- {p}" for p in slide_reference_paths)
+                + "\n"
+            )
+
+        person_constraint = (
+            "- Photorealistic people are allowed only when the attached slide-specific "
+            "reference images request a real person/photo treatment; otherwise use "
+            "silhouettes or stylized avatars."
+            if slide_reference_paths
+            else "- NO photorealistic human faces (use silhouettes or stylized avatars if needed)."
+        )
 
         system_prompt = f"""You are an elite Presentation Designer and Data Visualization Expert.
 Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
@@ -129,6 +266,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 {outline_context}
 {article_instruction}
 {style_instruction}
+{reference_instruction}
 
 # LAYOUT STRATEGY (Choose one based on content)
 - **Title Slide**: Bold, centered title, minimal visual, strong background.
@@ -150,7 +288,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 - NO cluttered "wall of text" (max 30 words per slide unless a list).
 - NO cropped elements.
 - NO low-contrast text (e.g., light gray on white).
-- NO photorealistic human faces (use silhouettes or stylized avatars if needed)."""
+{person_constraint}"""
 
         visual_instruction = f"\n**STRICT VISUAL INSTRUCTION**: {visual_tag}" if visual_tag else ""
         
@@ -160,6 +298,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 **Content**:
 {clean_content}
 {visual_instruction}
+{reference_summary}
 
 **Design Instructions**:
 1. Select the most appropriate layout from the LAYOUT STRATEGY list above.
@@ -234,6 +373,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
         output_dir: Path,
         article_pdfs: list[bytes] | None = None,
         article_texts: list[str] | None = None,
+        outline_dir: Path | None = None,
     ) -> list[Path]:
         """Generate multiple image variants for the first slide only.
         
@@ -243,6 +383,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
             output_dir: Output directory path
             article_pdfs: Optional list of reference article PDF bytes
             article_texts: Optional list of reference article texts
+            outline_dir: Optional base directory for relative slide reference images
             
         Returns:
             List of saved image paths
@@ -271,6 +412,13 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
 
         outline_context = self._build_full_outline_context(slides)
         with_articles = bool(article_pdfs or article_texts)
+        slide_reference_paths = self._resolve_reference_image_paths(slide, outline_dir)
+        slide_reference_images = [p.read_bytes() for p in slide_reference_paths]
+        if slide_reference_paths:
+            print(
+                "Using slide reference(s): "
+                + ", ".join(p.name for p in slide_reference_paths)
+            )
         
         user_prompt, system_prompt = self._build_prompt(
             slide,
@@ -278,10 +426,17 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
             global_style=global_style,
             with_style_reference=False,
             with_articles=with_articles,
+            slide_reference_paths=slide_reference_paths,
         )
         
         prompts = [
-            (user_prompt, system_prompt, None, article_pdfs, article_texts)
+            (
+                user_prompt,
+                system_prompt,
+                slide_reference_images or None,
+                article_pdfs,
+                article_texts,
+            )
             for _ in range(copy)
         ]
         results = await self.client.generate_images_parallel(prompts)
@@ -304,6 +459,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
         article_pdfs: list[bytes] | None = None,
         article_texts: list[str] | None = None,
         page_filter: set[int] | None = None,
+        outline_dir: Path | None = None,
     ) -> dict[int, list[Path]]:
         """Generate multiple image variants for all slides using style reference(s).
         
@@ -315,6 +471,7 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
             article_pdfs: Optional list of reference article PDF bytes
             article_texts: Optional list of reference article texts
             page_filter: Optional set of slide indices to generate (None = all)
+            outline_dir: Optional base directory for relative slide reference images
             
         Returns:
             Dictionary mapping slide index to list of saved image paths
@@ -353,6 +510,17 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
         ref_images = [p.read_bytes() for p in style_image_paths]
         outline_context = self._build_full_outline_context(slides)
         with_articles = bool(article_pdfs or article_texts)
+        slide_reference_paths_by_index = {
+            slide.index: self._resolve_reference_image_paths(slide, outline_dir)
+            for slide in slides
+        }
+        reference_summaries = [
+            f"slide {idx}: {', '.join(p.name for p in paths)}"
+            for idx, paths in slide_reference_paths_by_index.items()
+            if paths
+        ]
+        if reference_summaries:
+            print("Using slide reference(s): " + "; ".join(reference_summaries))
         
         # Build all prompts for parallel generation
         all_prompts: list[
@@ -360,16 +528,27 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
         ] = []
         
         for slide in slides:
+            slide_reference_paths = slide_reference_paths_by_index[slide.index]
+            slide_reference_images = [p.read_bytes() for p in slide_reference_paths]
+            combined_ref_images = ref_images + slide_reference_images
             user_prompt, system_prompt = self._build_prompt(
                 slide,
                 outline_context,
                 global_style=global_style,
                 with_style_reference=True,
                 with_articles=with_articles,
+                slide_reference_paths=slide_reference_paths,
+                style_reference_count=len(ref_images),
             )
             all_prompts.extend(
                 [
-                    (user_prompt, system_prompt, ref_images, article_pdfs, article_texts)
+                    (
+                        user_prompt,
+                        system_prompt,
+                        combined_ref_images,
+                        article_pdfs,
+                        article_texts,
+                    )
                     for _ in range(copy)
                 ]
             )

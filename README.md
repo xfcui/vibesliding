@@ -14,6 +14,8 @@ Stop wrestling with PowerPoint. Just write your content, pick a style, and let A
 ## Features
 
 - 🎨 **Style Transfer** — One or more reference images for a consistent, on-brand deck
+- 🖼️ **Slide References** — Attach slide-specific photos or image globs directly in the outline
+- 📚 **Outline Articles** — Declare source markdown/PDF references once in the outline
 - 🧠 **Smart Layouts** — AI auto-selects optimal layouts based on your content
 - 🔄 **Multiple Variants** — Generate several design options per slide
 - 🎯 **Selective Regeneration** — Redo specific slides without starting over
@@ -49,6 +51,10 @@ python3 -m src.cli --outline outline.md --style "examples/style_*.png" --copy 4
 # Regenerate specific slides
 python3 -m src.cli --outline outline.md --style "examples/style_*.png" --page "1,3,5-7" --copy 4
 
+# Rebuild slide_combined.pdf after deleting unwanted variants (no API calls)
+python3 -m src.cli --pdf-only --output output_20260520_220006
+python3 -m src.cli --pdf-only --output output_20260520_220006 --variant 1
+
 # Multiple explicit files (repeat --style) plus articles
 python3 -m src.cli --outline outline.md --style cover.png --style body.png --article "docs/*.pdf"
 ```
@@ -68,6 +74,8 @@ python3 -m src.cli --outline outline.md --style cover.png --style body.png --art
 | `--proxy` | HTTP/HTTPS proxy URL for OpenRouter only |
 | `--balance-only` | Print OpenRouter credits from the API and exit (OpenRouter only; no `--outline`) |
 | `--no-balance` | Skip the OpenRouter credits line after a normal run |
+| `--pdf-only` | Rebuild `slide_combined.pdf` from existing `slide_p##_v##.png` in `--output` (no `--outline`, no API) |
+| `--variant` | With `--pdf-only`: variant numbers to include (e.g. `1` or `1,2`); default: all PNGs in the folder |
 
 After each successful run with **OpenRouter**, the CLI prints remaining credits (from `GET /api/v1/credits`) unless you pass `--no-balance`. That endpoint expects an OpenRouter **Management API key**; add `OPENROUTER_MANAGEMENT_API_KEY` or `[openrouter] management_api_key` alongside your normal `api_key`. Volcengine runs never fetch or print this.
 
@@ -80,6 +88,11 @@ Each H2 heading becomes a slide:
 ```markdown
 # My Presentation
 
+[Articles:
+@examples/research-notes.md,
+@examples/market-report.pdf
+]
+
 ---
 
 ## Slide 1: Introduction
@@ -89,6 +102,7 @@ Your opening content here.
 - Key point two
 
 [Visual: hero image of the product]
+[Reference: examples/founder_photo.png]
 
 ---
 
@@ -107,6 +121,8 @@ What challenge are we solving?
 
 **Tips:**
 - Use `[Visual: description]` to guide AI imagery
+- Use `[Reference: path/or/glob.png]` for slide-specific image references; a leading `@` is accepted, e.g. `[Reference: @examples/data.png]`
+- Use `[Article: path.md]` or `[Articles: path1.md, path2.pdf]` near the top of the outline to attach text references automatically
 - Keep slides concise (~30 words max)
 - Global Visual Requirements sets the overall look
 
