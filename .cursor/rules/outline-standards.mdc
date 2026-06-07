@@ -38,6 +38,7 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 - Separate the title, every slide, and the appendix with `---`.
 - Use sequential slide headers: `## Slide N: [Title]`.
 - End every slide with one `[Visual: ...]` tag and one `[Speech: ...]` tag.
+- Include 3-6 transition slides that segment the deck into sections (see Transition Slide Quota).
 - Include `## Appendix: Global Visual Requirements` after the final slide.
 
 ## Slide Categories
@@ -47,6 +48,15 @@ Use exactly these three slide categories:
 - **Cover-Ending Slides:** Use for the opening title slide and final Q&A/thank-you slide. Keep bullets to 2-4 lines, make the premise or closing takeaway immediately legible, and visually reconnect the ending to the cover.
 - **Transition Slides:** Use for objectives, section dividers, roadmaps, and major act changes. Repeat the full roadmap or section map, bold only the current section, and include a visual progress marker such as `progress bar N/total`.
 - **Content Slides:** Use for teaching, concepts, workflows, case studies, comparisons, and conclusions. Teach one clear idea with 5-6 substantial bullets and an explicit takeaway such as `Core insight:`, `Core logic:`, or `Anti-pattern:`.
+
+### Transition Slide Quota
+
+Every deck MUST include **3-6 transition slides** that divide the content into clear sections:
+
+- Place one transition slide before each major section so the deck reads as 3-6 acts, never one undifferentiated run of content slides.
+- Make each transition slide detectable: prefix its title with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`) **and** include a progress marker such as `progress bar N/total` in its `[Visual:]` tag.
+- Reuse one consistent roadmap/section-map composition across all transition slides, bolding or highlighting only the current section each time.
+- Transition slides are in addition to the cover, ending, and the requested content-slide count.
 
 ## Writing Standards
 

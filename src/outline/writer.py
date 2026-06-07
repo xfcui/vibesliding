@@ -11,6 +11,34 @@ from src.core.api_client import OpenRouterClient
 OUTLINE_STANDARDS_PATH = Path(".cursor/rules/outline-standards.mdc")
 SLIDE_HEADER_PATTERN = re.compile(r"^## Slide \d+:", re.MULTILINE)
 
+MIN_TRANSITION_SLIDES = 3
+MAX_TRANSITION_SLIDES = 6
+# Transition slides are detectable by a "Roadmap:"-style title prefix or a
+# progress marker (e.g. "progress bar 6/29") in the slide body.
+TRANSITION_TITLE_PATTERN = re.compile(
+    r"^## Slide \d+:\s*(roadmap|transition|section|agenda|objectives)\b",
+    re.IGNORECASE,
+)
+PROGRESS_MARKER_PATTERN = re.compile(
+    r"progress bar\s*\d+\s*/\s*\d+|\bact\s+\d+\s+of\s+\d+\b",
+    re.IGNORECASE,
+)
+
+
+def count_transition_slides(outline: str) -> int:
+    """Count transition/roadmap slides via title prefix or progress marker."""
+    text = outline.strip()
+    slide_headers = list(SLIDE_HEADER_PATTERN.finditer(text))
+    count = 0
+    for index, match in enumerate(slide_headers):
+        start = match.start()
+        end = slide_headers[index + 1].start() if index + 1 < len(slide_headers) else len(text)
+        block = text[start:end]
+        header_line = block.splitlines()[0] if block else ""
+        if TRANSITION_TITLE_PATTERN.match(header_line) or PROGRESS_MARKER_PATTERN.search(block):
+            count += 1
+    return count
+
 
 @dataclass(frozen=True)
 class OutlineValidation:
@@ -97,10 +125,17 @@ For each item include:
 The shortest version ({min(target_slides)} slides) uses CORE topics only.
 Longer versions add EXTENDED topics in spine order without reordering or renaming CORE slides.
 
+### Section Map
+Group the narrative spine into **3-6 sections** (acts). For each section give:
+- **Section:** short section title
+- **Roadmap label:** 2-3 word uppercase chip label (e.g. `01 / ESSENTIALS`)
+
+Every outline version inserts one transition/roadmap slide before each section (3-6 transition slides total), so all versions share the same section structure regardless of content-slide count.
+
 ### Shared Visual System
 Deck-wide art direction every version must reuse:
 - Cover and closing slide visual treatment
-- Transition/roadmap visual pattern (if applicable)
+- Transition/roadmap visual pattern (MANDATORY): one consistent section-map composition reused on all 3-6 transition slides, highlighting only the current section and showing a `progress bar N/total` marker
 - Diagram language (boxes, arrows, connectors, icons, glow rules)
 - Recurring motifs and section color accents
 
@@ -148,10 +183,17 @@ Produce exactly **{target_slides} content slides** — teaching slides with subs
 
 This count is **only** content slides. It does **not** include:
 - Cover/title slide (always add one)
-- Transition/roadmap/section-divider slides (add ONLY if the idea explicitly requests them)
+- Transition/roadmap/section-divider slides (always add **3-6** of them — see below)
 - Closing/Q&A/thank-you slide (always add one)
 
-Add cover and closing slides in addition to the {target_slides} content slides.
+Add the cover, closing, and 3-6 transition slides in addition to the {target_slides} content slides.
+
+## Transition slides (MANDATORY: 3-6)
+Segment the deck into 3-6 sections, placing one transition slide before each section so the content never reads as one undifferentiated run.
+- Prefix every transition slide title with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`).
+- Give each transition slide a `[Visual:]` tag that repeats the same roadmap/section-map composition, highlights only the current section, and includes a `progress bar N/total` marker (N = this slide's number, total = total slide count).
+- Keep transition bullets short (2-4 lines) — they orient the audience, they do not teach.
+- Use shorter `[Speech:]` (15-30 s) on transition slides.
 
 ## DeepResearch report
 {report.strip()}
@@ -164,6 +206,7 @@ Add cover and closing slides in addition to the {target_slides} content slides.
 - Start with `# PPT Outline: [Title]`
 - Separate the title, every slide, and appendix with `---`
 - Use sequential `## Slide N: [Title]` headers (cover = Slide 1, content starts at Slide 2)
+- Insert 3-6 transition slides (titles prefixed `Roadmap:`) that divide the deck into sections
 - Every slide ends with exactly one `[Visual: ...]` tag and one `[Speech: ...]` tag
 - End with `## Appendix: Global Visual Requirements`
 
@@ -212,6 +255,14 @@ def validate_outline(outline: str) -> OutlineValidation:
             warnings.append(f"{title} missing [Visual:] tag.")
         if "[Speech:" not in block:
             warnings.append(f"{title} missing [Speech:] tag.")
+
+    transition_count = count_transition_slides(text)
+    if transition_count < MIN_TRANSITION_SLIDES or transition_count > MAX_TRANSITION_SLIDES:
+        warnings.append(
+            f"Outline has {transition_count} transition slide(s); expected "
+            f"{MIN_TRANSITION_SLIDES}-{MAX_TRANSITION_SLIDES} "
+            "(titles prefixed 'Roadmap:' with a 'progress bar N/total' marker)."
+        )
 
     return OutlineValidation(warnings=warnings)
 

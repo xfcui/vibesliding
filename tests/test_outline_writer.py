@@ -10,6 +10,7 @@ import pytest
 from src.core.api_client import OpenRouterClient
 from src.outline.writer import (
     build_outline_user_prompt,
+    count_transition_slides,
     load_outline_standards,
     strip_code_fences,
     validate_outline,
@@ -26,6 +27,27 @@ VALID_OUTLINE = """# PPT Outline: Test Deck
 - Core insight: One clear takeaway
 [Visual: Hero image with title left]
 [Speech: Welcome everyone.]
+
+---
+
+## Slide 2: Roadmap: Section One
+- **Where we are:** First act
+[Visual: Five-chip roadmap, section one highlighted, progress bar 2/6 lower right]
+[Speech: First section.]
+
+---
+
+## Slide 3: Roadmap: Section Two
+- **Where we are:** Second act
+[Visual: Same roadmap, section two highlighted, progress bar 3/6 lower right]
+[Speech: Second section.]
+
+---
+
+## Slide 4: Roadmap: Section Three
+- **Where we are:** Third act
+[Visual: Same roadmap, section three highlighted, progress bar 4/6 lower right]
+[Speech: Third section.]
 
 ---
 
@@ -49,6 +71,39 @@ class TestValidateOutline:
         bad = VALID_OUTLINE.replace("# PPT Outline:", "# Outline:")
         result = validate_outline(bad)
         assert any("PPT Outline" in w for w in result.warnings)
+
+    def test_too_few_transition_slides_warns(self) -> None:
+        outline = (
+            "# PPT Outline: Tiny\n\n---\n\n"
+            "## Slide 1: Intro\n[Visual: x]\n[Speech: y]\n\n---\n\n"
+            "## Appendix: Global Visual Requirements\n- **Theme:** Dark\n"
+        )
+        result = validate_outline(outline)
+        assert any("transition slide" in w for w in result.warnings)
+
+    def test_too_many_transition_slides_warns(self) -> None:
+        blocks = ["# PPT Outline: Big\n"]
+        for i in range(1, 8):
+            blocks.append(
+                f"---\n\n## Slide {i}: Roadmap: Section {i}\n"
+                f"[Visual: roadmap progress bar {i}/7]\n[Speech: z]\n"
+            )
+        blocks.append("---\n\n## Appendix: Global Visual Requirements\n- **Theme:** Dark\n")
+        outline = "\n".join(blocks)
+        result = validate_outline(outline)
+        assert any("transition slide" in w for w in result.warnings)
+
+
+class TestCountTransitionSlides:
+    def test_counts_roadmap_titles_and_progress_markers(self) -> None:
+        assert count_transition_slides(VALID_OUTLINE) == 3
+
+    def test_detects_progress_marker_without_roadmap_title(self) -> None:
+        outline = (
+            "# PPT Outline: X\n\n---\n\n"
+            "## Slide 1: Where We Are\n[Visual: chips, progress bar 1/4]\n[Speech: a]\n"
+        )
+        assert count_transition_slides(outline) == 1
 
 
 class TestStripCodeFences:

@@ -30,8 +30,8 @@ DEFAULT_VOLCENGINE_BASE: Final[str] = "https://ark.cn-beijing.volces.com/api/v3"
 
 DEFAULT_MAX_CONCURRENT: Final[int] = 12
 # Minimum spacing between successive API calls — caps the request start rate at
-# 3 calls/second across all in-flight tasks (including retries) for each client.
-DEFAULT_MIN_REQUEST_INTERVAL: Final[float] = 1.0 / 3.0
+# 2 calls/second across all in-flight tasks (including retries) for each client.
+DEFAULT_MIN_REQUEST_INTERVAL: Final[float] = 1.0 / 2.0
 DEFAULT_IMAGE_CONNECT_TIMEOUT: Final[float] = 30.0
 DEFAULT_IMAGE_READ_TIMEOUT: Final[float] = 300.0
 DEFAULT_IMAGE_WRITE_TIMEOUT: Final[float] = 60.0

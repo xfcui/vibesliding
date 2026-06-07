@@ -221,6 +221,7 @@ What challenge are we solving?
 - `[Reference: path/or/glob.png]` — slide-specific image refs (leading `@` accepted)
 - `[Articles: path1.md, path2.pdf]` — attach text references at the top of the outline
 - Keep slides concise (~30 words max)
+- Include **3-6 transition slides** (titles prefixed `Roadmap:`, each with a `progress bar N/total` marker) to split the deck into sections — added on top of the cover, ending, and requested content-slide count
 - `## Appendix: Global Visual Requirements` — **text styles only** (colors + hex, fonts + sizes); do not duplicate layout/graphics here — those live in `[Visual:]` tags and style reference images
 
 ### Compose Output (`slides_YYYYMMDD_HHMMSS/`)

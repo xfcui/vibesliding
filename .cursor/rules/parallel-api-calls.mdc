@@ -32,6 +32,24 @@ Reuse existing helpers in `src/core/api_client.py` — do not roll ad-hoc `async
 5. **Error handling** — Parallel helpers return `list[Result | Exception]`; callers must check `isinstance(result, Exception)` and raise with context.
 6. **Callbacks** — Use `on_result` when work should happen as each call completes (e.g. save images incrementally).
 
+## Reliability Controls
+
+Every external API call must go through the shared retry decorator and the global rate-limit lock — never bypass them with raw `httpx` requests.
+
+- **Retry up to 10 times** — Wrap each request in `@_image_api_retry()` (`stop_after_attempt(DEFAULT_RETRY_ATTEMPTS)` where `DEFAULT_RETRY_ATTEMPTS = 10`) with exponential jitter backoff. Only retry transient failures via `_is_retryable_exception` (5xx, 408/409/425/429, connect/timeout/decode errors); fail fast on permanent client errors.
+- **Global rate-limit lock** — Cap request starts at **at most 2 API calls per second** across all in-flight tasks (including retries) per client. Use the shared `AsyncRateLimiter` with `DEFAULT_MIN_REQUEST_INTERVAL = 1.0 / 2.0` (0.5s minimum spacing) and `await self._rate_limiter.acquire()` inside the retried request, before entering the `max_concurrent` semaphore.
+- **Order matters** — Acquire the rate limiter first, then the concurrency semaphore, so retries are re-spaced and the limiter is the single global throttle.
+
+```python
+@_image_api_retry()  # retries up to DEFAULT_RETRY_ATTEMPTS (10)
+async def _do_request() -> bytes:
+    await self._rate_limiter.acquire()  # global lock: ≤ 2 calls/sec
+    async with self.semaphore:          # then max_concurrent cap
+        response = await client.post(...)
+        response.raise_for_status()
+        return _extract(response.json())
+```
+
 ## Examples
 
 ```python
@@ -63,4 +81,5 @@ When introducing a new external API integration:
 
 1. Add a `*_parallel` method on the client (or extend `_run_parallel_api_calls`) if more than one call can run concurrently.
 2. Wire tqdm via the shared helper — never skip the progress bar for multi-call batches.
-3. For poll-based long runners, use `TqdmProgressReporter` or an equivalent tqdm postfix updater; keep `make_progress_printer` only for non-CLI/programmatic consumers.
+3. Wrap each request in `@_image_api_retry()` (10 attempts) and `await self._rate_limiter.acquire()` so the new workload inherits the same retry policy and the global ≤ 2 calls/sec lock.
+4. For poll-based long runners, use `TqdmProgressReporter` or an equivalent tqdm postfix updater; keep `make_progress_printer` only for non-CLI/programmatic consumers.

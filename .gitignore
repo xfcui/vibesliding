@@ -4,7 +4,6 @@
 # Output directories (timestamped and default)
 projects/
 work/
-outline_*/
 slides_*/
 
 # Test / coverage artifacts
