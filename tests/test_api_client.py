@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 import httpx
 from src.api_client import (
@@ -135,6 +137,29 @@ async def test_generate_images_parallel_mocked(client, mock_api_response, mock_i
     results = await client.generate_images_parallel(prompts)
     assert len(results) == 2
     assert all(r == mock_image_bytes for r in results)
+
+
+@pytest.mark.asyncio
+async def test_generate_images_parallel_invokes_on_result_per_completion(
+    client, mock_api_response, mock_image_bytes, respx_mock
+):
+    respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(200, json=mock_api_response)
+    )
+    prompts = [
+        ("prompt 1", None, None, None, None),
+        ("prompt 2", None, None, None, None),
+    ]
+    seen: list[tuple[int, bytes | Exception]] = []
+
+    def on_result(index: int, result: bytes | Exception) -> None:
+        seen.append((index, result))
+
+    results = await client.generate_images_parallel(prompts, on_result=on_result)
+    assert len(results) == 2
+    assert len(seen) == 2
+    assert {index for index, _ in seen} == {0, 1}
+    assert all(result == mock_image_bytes for _, result in seen)
 
 @pytest.mark.asyncio
 async def test_volcengine_generate_single_image_mocked(mock_image_bytes, respx_mock):

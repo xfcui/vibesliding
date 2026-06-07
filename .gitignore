@@ -2,7 +2,7 @@
 .env
 
 # Output directories (timestamped and default)
-backup/
+projects/
 output_*/
 
 # Python cache

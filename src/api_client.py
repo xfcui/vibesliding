@@ -7,7 +7,8 @@ import base64
 import json
 import logging
 import re
-from typing import Any, Final, NamedTuple
+from collections.abc import Awaitable, Callable
+from typing import Any, Final, NamedTuple, Optional, Union
 
 import httpx
 from tqdm import tqdm
@@ -36,7 +37,7 @@ DEFAULT_IMAGE_READ_TIMEOUT: Final[float] = 300.0
 DEFAULT_IMAGE_WRITE_TIMEOUT: Final[float] = 60.0
 DEFAULT_IMAGE_POOL_TIMEOUT: Final[float] = 30.0
 DEFAULT_CREDITS_TIMEOUT: Final[float] = 30.0
-DEFAULT_RETRY_ATTEMPTS: Final[int] = 5
+DEFAULT_RETRY_ATTEMPTS: Final[int] = 10
 DEFAULT_RETRY_WAIT_INITIAL: Final[float] = 1.0
 DEFAULT_RETRY_WAIT_MAX: Final[float] = 60.0
 RETRYABLE_HTTP_STATUS_CODES: Final[frozenset[int]] = frozenset({408, 409, 425, 429})
@@ -45,6 +46,16 @@ DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)"
 # OpenRouter image_config (see https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 SLIDE_ASPECT_RATIO: Final[str] = "16:9"
 SLIDE_IMAGE_SIZE: Final[str] = "2K"
+
+ImagePrompt = tuple[
+    str,
+    Optional[str],
+    Optional[list[bytes]],
+    Optional[list[bytes]],
+    Optional[list[str]],
+]
+OnImageResult = Callable[[int, Union[bytes, Exception]], None]
+GenerateImageFn = Callable[[httpx.AsyncClient, ImagePrompt], Awaitable[bytes]]
 
 
 def _image_timeout() -> httpx.Timeout:
@@ -118,6 +129,48 @@ class CreditsFetchOutcome(NamedTuple):
 
     credits: dict[str, float] | None
     error: str | None = None
+
+
+async def _run_parallel_image_generation(
+    *,
+    prompts: list[ImagePrompt],
+    max_concurrent: int,
+    proxy: str | None,
+    generate_fn: GenerateImageFn,
+    on_result: OnImageResult | None = None,
+) -> list[bytes | Exception]:
+    """Run image jobs concurrently and invoke *on_result* as each one finishes."""
+    total = len(prompts)
+    limits = httpx.Limits(
+        max_connections=max_concurrent,
+        max_keepalive_connections=max_concurrent,
+    )
+    async with httpx.AsyncClient(
+        proxy=proxy,
+        timeout=_image_timeout(),
+        limits=limits,
+    ) as client:
+        with tqdm(total=total, desc="API calls", unit="call") as pbar:
+
+            async def _run_one(index: int, prompt: ImagePrompt) -> tuple[int, bytes | Exception]:
+                try:
+                    return index, await generate_fn(client, prompt)
+                except Exception as exc:
+                    return index, exc
+                finally:
+                    pbar.update(1)
+
+            tasks = [
+                asyncio.create_task(_run_one(index, prompt))
+                for index, prompt in enumerate(prompts)
+            ]
+            results: list[bytes | Exception | None] = [None] * total
+            for task in asyncio.as_completed(tasks):
+                index, result = await task
+                results[index] = result
+                if on_result is not None:
+                    on_result(index, result)
+            return [r if r is not None else RuntimeError("Missing image result") for r in results]
 
 
 def _image_bytes_to_data_url(image_bytes: bytes) -> str:
@@ -351,58 +404,39 @@ class OpenRouterClient:
 
     async def generate_images_parallel(
         self,
-        prompts: list[tuple[
-            str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None
-        ]],
+        prompts: list[ImagePrompt],
+        on_result: OnImageResult | None = None,
     ) -> list[bytes | Exception]:
         """Generate multiple images in parallel with progress tracking.
 
         Args:
             prompts: List of (prompt, system_prompt, reference_images,
                 article_pdfs, article_texts).
+            on_result: Optional callback invoked as each image finishes, with
+                ``(index, result)`` where *result* is image bytes or an
+                exception for a failed generation.
 
         Returns:
             List of generated images (bytes) or exceptions for failed generations
         """
-        total = len(prompts)
-        limits = httpx.Limits(
-            max_connections=self.max_concurrent,
-            max_keepalive_connections=self.max_concurrent,
-        )
-        async with httpx.AsyncClient(
+        async def _generate_one(client: httpx.AsyncClient, prompt: ImagePrompt) -> bytes:
+            user_prompt, sys_prompt, ref_images, _article_pdfs, article_texts = prompt
+            # NOTE: PDF content extraction is not implemented yet
+            # For now, combine all article texts as context
+            context = None
+            if article_texts:
+                context = "\n\n---\n\n".join(article_texts)
+            return await self._generate_single_image(
+                client, user_prompt, sys_prompt, ref_images, context
+            )
+
+        return await _run_parallel_image_generation(
+            prompts=prompts,
+            max_concurrent=self.max_concurrent,
             proxy=self._proxy,
-            timeout=_image_timeout(),
-            limits=limits,
-        ) as client:
-            with tqdm(total=total, desc="API calls", unit="call") as pbar:
-
-                async def _wrap_with_progress(
-                    prompt: str,
-                    sys_prompt: str | None,
-                    ref_images: list[bytes] | None,
-                    article_pdfs: list[bytes] | None,
-                    article_texts: list[str] | None,
-                ) -> bytes | Exception:
-                    """Wrap generation with progress bar update."""
-                    try:
-                        # NOTE: PDF content extraction is not implemented yet
-                        # For now, combine all article texts as context
-                        context = None
-                        if article_texts:
-                            context = "\n\n---\n\n".join(article_texts)
-                        return await self._generate_single_image(
-                            client, prompt, sys_prompt, ref_images, context
-                        )
-                    finally:
-                        pbar.update(1)
-
-                tasks = [
-                    _wrap_with_progress(
-                        prompt, sys_prompt, ref_images, article_pdfs, article_texts
-                    )
-                    for prompt, sys_prompt, ref_images, article_pdfs, article_texts in prompts
-                ]
-                return list(await asyncio.gather(*tasks, return_exceptions=True))
+            generate_fn=_generate_one,
+            on_result=on_result,
+        )
 
 
 class VolcengineClient:
@@ -537,43 +571,22 @@ class VolcengineClient:
 
     async def generate_images_parallel(
         self,
-        prompts: list[tuple[
-            str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None
-        ]],
+        prompts: list[ImagePrompt],
+        on_result: OnImageResult | None = None,
     ) -> list[bytes | Exception]:
-        total = len(prompts)
-        limits = httpx.Limits(
-            max_connections=self.max_concurrent,
-            max_keepalive_connections=self.max_concurrent,
-        )
-        async with httpx.AsyncClient(
+        async def _generate_one(client: httpx.AsyncClient, prompt: ImagePrompt) -> bytes:
+            user_prompt, sys_prompt, ref_images, _article_pdfs, article_texts = prompt
+            context = None
+            if article_texts:
+                context = "\n\n---\n\n".join(article_texts)
+            return await self._generate_single_image(
+                client, user_prompt, sys_prompt, ref_images, context
+            )
+
+        return await _run_parallel_image_generation(
+            prompts=prompts,
+            max_concurrent=self.max_concurrent,
             proxy=self._proxy,
-            timeout=_image_timeout(),
-            limits=limits,
-        ) as client:
-            with tqdm(total=total, desc="API calls", unit="call") as pbar:
-
-                async def _wrap_with_progress(
-                    prompt: str,
-                    sys_prompt: str | None,
-                    ref_images: list[bytes] | None,
-                    article_pdfs: list[bytes] | None,
-                    article_texts: list[str] | None,
-                ) -> bytes | Exception:
-                    try:
-                        context = None
-                        if article_texts:
-                            context = "\n\n---\n\n".join(article_texts)
-                        return await self._generate_single_image(
-                            client, prompt, sys_prompt, ref_images, context
-                        )
-                    finally:
-                        pbar.update(1)
-
-                tasks = [
-                    _wrap_with_progress(
-                        prompt, sys_prompt, ref_images, article_pdfs, article_texts
-                    )
-                    for prompt, sys_prompt, ref_images, article_pdfs, article_texts in prompts
-                ]
-                return list(await asyncio.gather(*tasks, return_exceptions=True))
+            generate_fn=_generate_one,
+            on_result=on_result,
+        )

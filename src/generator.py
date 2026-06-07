@@ -335,36 +335,42 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
             print(f"Generated {successes}/{expected} image(s) successfully.")
 
     @staticmethod
-    def _save_images_and_pdf(
-        results: list[bytes | Exception],
+    def _save_image_result(result: bytes | Exception, path: Path) -> Path | None:
+        """Save a single successful API result to disk."""
+        if isinstance(result, Exception):
+            return None
+        save_image(result, path)
+        print(f"Saved {path.name}")
+        return path
+
+    @staticmethod
+    def _create_combined_pdf(saved_paths: list[Path], output_dir: Path) -> None:
+        """Create combined PDF from successfully saved slide images."""
+        if not saved_paths:
+            return
+        pdf_path = output_dir / "slide_combined.pdf"
+        create_pdf_from_images(saved_paths, pdf_path)
+        print(f"Created {pdf_path.name}")
+
+    def _make_image_save_callback(
+        self,
         paths: list[Path],
-        output_dir: Path,
-    ) -> list[Path]:
-        """Save successful results to files and create combined PDF.
-        
-        Args:
-            results: List of API results (bytes or exceptions)
-            paths: Corresponding file paths for each result
-            output_dir: Directory for output files
-            
-        Returns:
-            List of successfully saved file paths
-        """
-        saved_paths: list[Path] = []
-        
-        for result, path in zip(results, paths):
-            if isinstance(result, Exception):
-                continue
-            save_image(result, path)
-            saved_paths.append(path)
-        
-        if saved_paths:
-            print(f"Saving {len(saved_paths)} image(s) to {output_dir}...")
-            pdf_path = output_dir / "slide_combined.pdf"
-            create_pdf_from_images(saved_paths, pdf_path)
-            print(f"Created {pdf_path.name}")
-        
-        return saved_paths
+        saved_slots: list[Path | None],
+    ):
+        """Return a callback that writes each image as soon as its API call finishes."""
+        def on_result(index: int, result: bytes | Exception) -> None:
+            if index < 0 or index >= len(paths):
+                return
+            saved = self._save_image_result(result, paths[index])
+            if saved is not None:
+                saved_slots[index] = saved
+
+        return on_result
+
+    @staticmethod
+    def _ordered_saved_paths(saved_slots: list[Path | None]) -> list[Path]:
+        """Return saved paths in generation order, skipping failures."""
+        return [path for path in saved_slots if path is not None]
 
     async def generate_first_slide_images(
         self,
@@ -439,16 +445,21 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
             )
             for _ in range(copy)
         ]
-        results = await self.client.generate_images_parallel(prompts)
-
-        self._report_results(results, copy)
-
         output_dir = Path(output_dir)
         paths = [
             output_dir / f"slide_p{slide.index:02d}_v{i + 1:02d}.png"
-            for i in range(len(results))
+            for i in range(copy)
         ]
-        return self._save_images_and_pdf(results, paths, output_dir)
+        saved_slots: list[Path | None] = [None] * len(paths)
+        results = await self.client.generate_images_parallel(
+            prompts,
+            on_result=self._make_image_save_callback(paths, saved_slots),
+        )
+
+        self._report_results(results, copy)
+        saved_paths = self._ordered_saved_paths(saved_slots)
+        self._create_combined_pdf(saved_paths, output_dir)
+        return saved_paths
 
     async def generate_all_slide_images(
         self,
@@ -553,27 +564,30 @@ Your task is to generate a pixel-perfect 1920x1080 (16:9) slide image.
                 ]
             )
 
-        results = await self.client.generate_images_parallel(all_prompts)
-        self._report_results(results, total)
-
-        # Generate file paths and save
         output_dir = Path(output_dir)
         paths = [
             output_dir / f"slide_p{slide.index:02d}_v{v + 1:02d}.png"
             for slide in slides
             for v in range(copy)
         ]
-        self._save_images_and_pdf(results, paths, output_dir)
+        saved_slots: list[Path | None] = [None] * len(paths)
+        results = await self.client.generate_images_parallel(
+            all_prompts,
+            on_result=self._make_image_save_callback(paths, saved_slots),
+        )
+        self._report_results(results, total)
 
-        # Build result dictionary mapping slide index to paths
+        saved_paths = self._ordered_saved_paths(saved_slots)
+        self._create_combined_pdf(saved_paths, output_dir)
+
         slide_paths: dict[int, list[Path]] = {}
         idx = 0
         for slide in slides:
             slide_paths[slide.index] = []
-            for v in range(copy):
-                if idx < len(results) and not isinstance(results[idx], Exception):
-                    path = output_dir / f"slide_p{slide.index:02d}_v{v + 1:02d}.png"
-                    slide_paths[slide.index].append(path)
+            for _ in range(copy):
+                saved = saved_slots[idx]
+                if saved is not None:
+                    slide_paths[slide.index].append(saved)
                 idx += 1
-        
+
         return slide_paths
