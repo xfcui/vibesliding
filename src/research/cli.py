@@ -44,10 +44,19 @@ load_dotenv()
     envvar="VALYU_API_KEY",
     help="Valyu API key (or VALYU_API_KEY / [valyu] api_key in .env).",
 )
+@click.option(
+    "--categories",
+    default=None,
+    help=(
+        "Comma-separated Valyu datasource categories to include "
+        "(or VALYU_CATEGORIES / [valyu] categories in .env)."
+    ),
+)
 def main(
     work_dir: Path,
     mode: str | None,
     valyu_api_key: str | None,
+    categories: str | None,
 ) -> None:
     """Run Valyu DeepResearch on work/idea.md and write research.md + sources.md."""
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -66,6 +75,7 @@ def main(
     config = load_outline_config(
         valyu_api_key_override=valyu_api_key,
         valyu_mode_override=mode_override,
+        valyu_categories_override=categories,
     )
     config.validate_research()
 
@@ -75,6 +85,10 @@ def main(
     click.echo(f"Work dir: {work_dir.resolve()}")
     click.echo(f"Idea: {idea_path.resolve()}")
     click.echo(f"Valyu mode: {config.valyu_mode}")
+    if config.valyu_categories:
+        click.echo(f"Valyu categories: {', '.join(config.valyu_categories)}")
+    else:
+        click.echo("Valyu categories: all")
     click.echo("Starting DeepResearch (this may take several minutes)...")
 
     progress = TqdmProgressReporter()
@@ -91,6 +105,7 @@ def main(
             idea,
             api_key=config.valyu_api_key or "",
             mode=config.valyu_mode,
+            categories=config.valyu_categories,
             on_progress=progress,
             on_status_retry=_on_status_retry,
         )

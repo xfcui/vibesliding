@@ -17,6 +17,7 @@ from src.research.deepresearch import (
     _fetch_status_resilient,
     _is_transient_status_error,
     format_progress,
+    resolve_datasource_ids,
 )
 
 
@@ -140,9 +141,54 @@ class TestRunDeepresearch:
         assert create_kwargs["query"] == "AI agents in software"
         assert create_kwargs["mode"] == "standard"
         assert create_kwargs["output_formats"] == ["markdown"]
+        assert "search" not in create_kwargs
         poll_interval, max_wait = MODE_POLL_SETTINGS["standard"]
         assert poll_interval == 10
         assert max_wait == 1800
+
+    def test_categories_restrict_included_sources(self) -> None:
+        mock_task = SimpleNamespace(deepresearch_id="dr_cat")
+        mock_result = SimpleNamespace(
+            success=True,
+            status="completed",
+            output="# Report",
+            sources=[],
+            cost=0.5,
+            deepresearch_id="dr_cat",
+            error=None,
+        )
+
+        mock_ds_response = SimpleNamespace(
+            success=True,
+            datasources=[
+                SimpleNamespace(id="valyu/valyu-arxiv"),
+                SimpleNamespace(id="valyu/valyu-pubmed"),
+            ],
+        )
+        mock_valyu = MagicMock()
+        mock_valyu.datasources.return_value = mock_ds_response
+
+        mock_deepresearch = MagicMock()
+        mock_deepresearch.create.return_value = mock_task
+        mock_deepresearch.status.return_value = mock_result
+        mock_valyu.deepresearch = mock_deepresearch
+
+        with (
+            patch("valyu.Valyu", return_value=mock_valyu),
+            patch("src.research.deepresearch.time.sleep"),
+        ):
+            run_deepresearch(
+                "topic",
+                api_key="key",
+                categories=("research",),
+            )
+
+        mock_valyu.datasources.assert_called_once_with(category="research")
+        create_kwargs = mock_deepresearch.create.call_args.kwargs
+        assert create_kwargs["search"] == {
+            "search_type": "proprietary",
+            "included_sources": ["valyu/valyu-arxiv", "valyu/valyu-pubmed"],
+        }
 
     def test_failed_task_raises(self) -> None:
         mock_task = SimpleNamespace(deepresearch_id="dr_fail")

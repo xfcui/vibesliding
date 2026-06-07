@@ -15,6 +15,19 @@ VOLCENGINE_SECTION: Final[str] = "volcengine"
 VALYU_SECTION: Final[str] = "valyu"
 Provider = Literal["openrouter", "volcengine"]
 DeepResearchMode = Literal["fast", "standard", "heavy", "max"]
+VALYU_DATASOURCE_CATEGORIES: Final[tuple[str, ...]] = (
+    "research",
+    "healthcare",
+    "patents",
+    "markets",
+    "company",
+    "economic",
+    "predictions",
+    "legal",
+    "politics",
+    "cybersecurity",
+    "transportation",
+)
 
 
 def _normalize_ini_for_configparser(text: str) -> str:
@@ -79,12 +92,31 @@ class Config:
             raise ValueError(f"max_concurrent must be at least 1, got: {self.max_concurrent}")
 
 
+def _parse_csv_list(raw: str | None) -> tuple[str, ...]:
+    if not raw or not raw.strip():
+        return ()
+    return tuple(part.strip().lower() for part in raw.split(",") if part.strip())
+
+
+def _validate_valyu_categories(categories: tuple[str, ...]) -> None:
+    if not categories:
+        return
+    unknown = [c for c in categories if c not in VALYU_DATASOURCE_CATEGORIES]
+    if unknown:
+        valid = ", ".join(VALYU_DATASOURCE_CATEGORIES)
+        raise ValueError(
+            f"Unknown Valyu datasource categories: {', '.join(unknown)}. "
+            f"Valid categories: {valid}"
+        )
+
+
 @dataclass
 class OutlineConfig:
     """Configuration for idea-to-outline (Valyu + OpenRouter text)."""
 
     valyu_api_key: str | None
     valyu_mode: DeepResearchMode
+    valyu_categories: tuple[str, ...]
     openrouter_api_key: str | None
     txt_model: str
     proxy: str | None
@@ -96,6 +128,7 @@ class OutlineConfig:
                 "Valyu API key is required. Set it via --valyu-api-key, "
                 "VALYU_API_KEY env var, or in .env under [valyu] api_key."
             )
+        _validate_valyu_categories(self.valyu_categories)
 
     def validate_outline(self) -> None:
         if not self.openrouter_api_key or not self.openrouter_api_key.strip():
@@ -201,11 +234,11 @@ def _load_volcengine_from_parser(parser: ConfigParser) -> dict[str, str | None]:
 
 
 def _load_valyu_from_parser(parser: ConfigParser) -> dict[str, str | None]:
-    out: dict[str, str | None] = {"api_key": None, "mode": None}
+    out: dict[str, str | None] = {"api_key": None, "mode": None, "categories": None}
     if not parser.has_section(VALYU_SECTION):
         return out
     section = parser[VALYU_SECTION]
-    for key in ("api_key", "mode"):
+    for key in ("api_key", "mode", "categories"):
         value = section.get(key, "").strip()
         if value:
             out[key] = value
@@ -555,6 +588,7 @@ def load_outline_config(
     txt_model_override: str | None = None,
     proxy_override: str | None = None,
     valyu_mode_override: DeepResearchMode | None = None,
+    valyu_categories_override: str | None = None,
 ) -> OutlineConfig:
     """Load configuration for the outline CLI (Valyu + OpenRouter text).
 
@@ -597,6 +631,14 @@ def load_outline_config(
         )
     valyu_mode: DeepResearchMode = mode_raw  # type: ignore[assignment]
 
+    categories_raw = (
+        (valyu_categories_override or "").strip()
+        or (os.getenv("VALYU_CATEGORIES") or "").strip()
+        or (valyu.get("categories") or "").strip()
+    )
+    valyu_categories = _parse_csv_list(categories_raw)
+    _validate_valyu_categories(valyu_categories)
+
     max_concurrent = _resolve_max_concurrent_with_env(
         section_mc=(
             openrouter.get("max_concurrent")
@@ -614,6 +656,7 @@ def load_outline_config(
     return OutlineConfig(
         valyu_api_key=valyu_api_key,
         valyu_mode=valyu_mode,
+        valyu_categories=valyu_categories,
         openrouter_api_key=openrouter_api_key,
         txt_model=txt_model,
         proxy=proxy,

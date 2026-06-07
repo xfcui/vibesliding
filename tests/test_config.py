@@ -198,6 +198,7 @@ def test_load_outline_config(
     c = load_outline_config(config_path=env)
     assert c.valyu_api_key == "valyu-key"
     assert c.valyu_mode == "heavy"
+    assert c.valyu_categories == ()
     assert c.openrouter_api_key == "or-key"
     assert c.txt_model == "anthropic/claude-sonnet-4"
     assert c.max_concurrent == 3
@@ -222,11 +223,43 @@ def test_load_outline_config_cli_overrides(
         openrouter_api_key_override="cli-or",
         txt_model_override="openai/gpt-4",
         valyu_mode_override="fast",
+        valyu_categories_override="research, markets",
     )
     assert c.valyu_api_key == "cli-valyu"
     assert c.openrouter_api_key == "cli-or"
     assert c.txt_model == "openai/gpt-4"
     assert c.valyu_mode == "fast"
+    assert c.valyu_categories == ("research", "markets")
+
+
+def test_load_outline_config_valyu_categories_from_env_section(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("VALYU_CATEGORIES", raising=False)
+    env = tmp_path / ".env"
+    env.write_text(
+        "max_concurrent = 1\n\n"
+        "[openrouter]\napi_key = or\ntxt_model = m\n"
+        "[valyu]\napi_key = v\ncategories = research,healthcare\n",
+        encoding="utf-8",
+    )
+    c = load_outline_config(config_path=env)
+    assert c.valyu_categories == ("research", "healthcare")
+
+
+def test_load_outline_config_rejects_unknown_valyu_categories(
+    tmp_path: Path,
+) -> None:
+    env = tmp_path / ".env"
+    env.write_text(
+        "max_concurrent = 1\n\n"
+        "[openrouter]\napi_key = or\ntxt_model = m\n"
+        "[valyu]\napi_key = v\ncategories = not-a-category\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Unknown Valyu datasource categories"):
+        load_outline_config(config_path=env)
 
 
 def test_load_outline_config_volcengine_txt_model_fallback(

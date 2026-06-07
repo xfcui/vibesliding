@@ -33,6 +33,7 @@ def test_research_cli_writes_work_dir_and_prints_next_command(tmp_path: Path) ->
             return_value=SimpleNamespace(
                 valyu_api_key="valyu-test-key",
                 valyu_mode="fast",
+                valyu_categories=(),
                 validate_research=lambda: None,
             ),
         ),

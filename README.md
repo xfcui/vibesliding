@@ -98,6 +98,7 @@ python3 -m src.compose.cli --style cover.png --style body.png --article "docs/*.
 |--------|-------------|
 | `--work` | Work directory (default: `work/`) |
 | `--mode` | Valyu DeepResearch mode: `fast`, `standard`, `heavy`, `max` |
+| `--categories` | Comma-separated Valyu datasource categories (or `VALYU_CATEGORIES` / `[valyu] categories`) |
 | `--valyu-api-key` | Valyu API key (or `VALYU_API_KEY` / `[valyu] api_key`) |
 
 ### Outline CLI Options (`python3 -m src.outline.cli`)
@@ -261,9 +262,10 @@ use_proxy = true
 [valyu]
 api_key = your-valyu-api-key-here
 # mode = standard
+# categories = research, healthcare
 ```
 
-- **Research** uses `[valyu]` for DeepResearch
+- **Research** uses `[valyu]` for DeepResearch (`mode`, optional `categories` to limit datasource categories)
 - **Outline** uses `txt_model` from `[openrouter]` or `[volcengine]`
 - **Style** and **Compose** use `img_model` from the active `provider`
 - Each step is independent — configure each backend separately

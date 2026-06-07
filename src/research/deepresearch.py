@@ -353,11 +353,35 @@ def _wait_for_deepresearch(
         time.sleep(poll_interval)
 
 
+def resolve_datasource_ids(valyu: Any, categories: tuple[str, ...]) -> list[str]:
+    """Resolve Valyu datasource category IDs to concrete datasource IDs."""
+    if not categories:
+        return []
+
+    ids: list[str] = []
+    seen: set[str] = set()
+    for category in categories:
+        response = valyu.datasources(category=category)
+        success = _get_attr(response, "success", False)
+        if not success:
+            error = _get_attr(response, "error", "unknown error")
+            raise RuntimeError(
+                f"Failed to list Valyu datasources for category {category!r}: {error}"
+            )
+        for ds in _get_attr(response, "datasources", []) or []:
+            ds_id = _get_attr(ds, "id")
+            if ds_id and ds_id not in seen:
+                seen.add(ds_id)
+                ids.append(ds_id)
+    return ids
+
+
 def run_deepresearch(
     idea: str,
     *,
     api_key: str,
     mode: DeepResearchMode = "standard",
+    categories: tuple[str, ...] = (),
     report_format: str | None = None,
     on_progress: ProgressCallback | None = None,
     on_status_retry: StatusRetryCallback | None = None,
@@ -368,6 +392,7 @@ def run_deepresearch(
         idea: Research query / presentation topic seed.
         api_key: Valyu API key.
         mode: DeepResearch mode (fast, standard, heavy, max).
+        categories: Optional Valyu datasource categories to restrict search to.
         report_format: Optional natural-language output instructions.
         on_progress: Optional callback invoked on each poll with status object.
 
@@ -389,12 +414,24 @@ def run_deepresearch(
     poll_interval, max_wait_time = MODE_POLL_SETTINGS[mode]
     valyu = Valyu(api_key)
 
-    task = valyu.deepresearch.create(
-        query=idea,
-        mode=mode,
-        output_formats=["markdown"],
-        report_format=report_format or DEFAULT_REPORT_FORMAT,
-    )
+    create_kwargs: dict[str, Any] = {
+        "query": idea,
+        "mode": mode,
+        "output_formats": ["markdown"],
+        "report_format": report_format or DEFAULT_REPORT_FORMAT,
+    }
+    if categories:
+        included_sources = resolve_datasource_ids(valyu, categories)
+        if not included_sources:
+            raise RuntimeError(
+                f"No Valyu datasources found for categories: {', '.join(categories)}"
+            )
+        create_kwargs["search"] = {
+            "search_type": "proprietary",
+            "included_sources": included_sources,
+        }
+
+    task = valyu.deepresearch.create(**create_kwargs)
 
     result = _wait_for_deepresearch(
         valyu.deepresearch,
