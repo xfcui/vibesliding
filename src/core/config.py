@@ -12,7 +12,9 @@ from typing import Final, Literal
 DEFAULT_CONFIG_PATH: Final[Path] = Path(".env")
 OPENROUTER_SECTION: Final[str] = "openrouter"
 VOLCENGINE_SECTION: Final[str] = "volcengine"
+VALYU_SECTION: Final[str] = "valyu"
 Provider = Literal["openrouter", "volcengine"]
+DeepResearchMode = Literal["fast", "standard", "heavy", "max"]
 
 
 def _normalize_ini_for_configparser(text: str) -> str:
@@ -77,6 +79,46 @@ class Config:
             raise ValueError(f"max_concurrent must be at least 1, got: {self.max_concurrent}")
 
 
+@dataclass
+class OutlineConfig:
+    """Configuration for idea-to-outline (Valyu + OpenRouter text)."""
+
+    valyu_api_key: str | None
+    valyu_mode: DeepResearchMode
+    openrouter_api_key: str | None
+    txt_model: str
+    proxy: str | None
+    max_concurrent: int
+
+    def validate_research(self) -> None:
+        if not self.valyu_api_key or not self.valyu_api_key.strip():
+            raise ValueError(
+                "Valyu API key is required. Set it via --valyu-api-key, "
+                "VALYU_API_KEY env var, or in .env under [valyu] api_key."
+            )
+
+    def validate_outline(self) -> None:
+        if not self.openrouter_api_key or not self.openrouter_api_key.strip():
+            raise ValueError(
+                "OpenRouter API key is required. Set it via --api-key, "
+                "OPENROUTER_API_KEY env var, or in .env under [openrouter] api_key."
+            )
+        if not self.txt_model or not self.txt_model.strip():
+            raise ValueError(
+                "Text model is required. Set it in .env under [openrouter] txt_model "
+                "or [volcengine] txt_model, or via OPENROUTER_TXT_MODEL / "
+                "VOLCENGINE_TXT_MODEL env var."
+            )
+        if self.max_concurrent < 1:
+            raise ValueError(
+                f"max_concurrent must be at least 1, got: {self.max_concurrent}"
+            )
+
+    def validate(self) -> None:
+        self.validate_research()
+        self.validate_outline()
+
+
 def _parser_from_env_path(config_path: Path) -> ConfigParser:
     parser = ConfigParser()
     if not config_path.exists():
@@ -101,14 +143,22 @@ def _load_openrouter_from_parser(parser: ConfigParser) -> dict[str, str | int | 
         "api_key": None,
         "management_api_key": None,
         "proxy": None,
-        "model": None,
+        "img_model": None,
+        "txt_model": None,
         "max_concurrent": None,
         "use_proxy": None,
     }
     if not parser.has_section(OPENROUTER_SECTION):
         return out
     section = parser[OPENROUTER_SECTION]
-    for key in ("api_key", "management_api_key", "proxy", "model", "use_proxy"):
+    for key in (
+        "api_key",
+        "management_api_key",
+        "proxy",
+        "img_model",
+        "txt_model",
+        "use_proxy",
+    ):
         value = section.get(key, "").strip()
         if value:
             out[key] = value
@@ -121,7 +171,8 @@ def _load_openrouter_from_parser(parser: ConfigParser) -> dict[str, str | int | 
 def _load_volcengine_from_parser(parser: ConfigParser) -> dict[str, str | None]:
     out: dict[str, str | None] = {
         "api_key": None,
-        "model": None,
+        "img_model": None,
+        "txt_model": None,
         "base_url": None,
         "image_size": None,
         "response_format": None,
@@ -134,7 +185,8 @@ def _load_volcengine_from_parser(parser: ConfigParser) -> dict[str, str | None]:
     section = parser[VOLCENGINE_SECTION]
     for key in (
         "api_key",
-        "model",
+        "img_model",
+        "txt_model",
         "base_url",
         "image_size",
         "response_format",
@@ -142,6 +194,18 @@ def _load_volcengine_from_parser(parser: ConfigParser) -> dict[str, str | None]:
         "proxy",
         "use_proxy",
     ):
+        value = section.get(key, "").strip()
+        if value:
+            out[key] = value
+    return out
+
+
+def _load_valyu_from_parser(parser: ConfigParser) -> dict[str, str | None]:
+    out: dict[str, str | None] = {"api_key": None, "mode": None}
+    if not parser.has_section(VALYU_SECTION):
+        return out
+    section = parser[VALYU_SECTION]
+    for key in ("api_key", "mode"):
         value = section.get(key, "").strip()
         if value:
             out[key] = value
@@ -179,6 +243,31 @@ def _default_str(parser: ConfigParser, key: str) -> str | None:
     return v or None
 
 
+def _first_nonempty_str(*values: str | None) -> str | None:
+    """Return the first non-empty stripped string among *values*."""
+    for value in values:
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _resolve_max_concurrent_with_env(
+    *,
+    section_mc: int | None,
+    env_name: str,
+    default_mc: int | None,
+) -> int | None:
+    """Resolve max_concurrent from section, DEFAULT fallback, then env override."""
+    mc = section_mc if section_mc is not None else default_mc
+    env_raw = os.getenv(env_name)
+    if env_raw:
+        try:
+            mc = int(env_raw)
+        except ValueError:
+            pass
+    return mc
+
+
 def _load_raw_config(config_path: Path | None = None) -> dict[str, str | int | None]:
     """Load raw OpenRouter-oriented settings (backward compatibility for get_api_key)."""
     config_path = config_path or DEFAULT_CONFIG_PATH
@@ -190,8 +279,8 @@ def _load_raw_config(config_path: Path | None = None) -> dict[str, str | int | N
 
     if os.getenv("OPENROUTER_PROXY"):
         data["proxy"] = os.getenv("OPENROUTER_PROXY")
-    if os.getenv("OPENROUTER_MODEL"):
-        data["model"] = os.getenv("OPENROUTER_MODEL")
+    if os.getenv("OPENROUTER_IMG_MODEL"):
+        data["img_model"] = os.getenv("OPENROUTER_IMG_MODEL")
     max_concurrent_env = os.getenv("OPENROUTER_MAX_CONCURRENT")
     if max_concurrent_env:
         try:
@@ -258,66 +347,38 @@ def load_config(
     volcengine = _load_volcengine_from_parser(parser)
     default_mc = _default_max_concurrent(parser)
 
-    def resolve_max_concurrent(file_mc: int | None) -> int | None:
-        if file_mc is not None:
-            return file_mc
-        return default_mc
-
     if provider == "openrouter":
         raw = openrouter
         api_key = _resolve_openrouter_api_key(api_key_override, path)
-        proxy_section = raw.get("proxy")
-        proxy_from_section = (
-            proxy_section.strip()
-            if isinstance(proxy_section, str) and proxy_section.strip()
-            else None
+        proxy = _resolve_openrouter_proxy(parser, proxy_override=proxy_override)
+        model = _first_nonempty_str(
+            raw.get("img_model") if isinstance(raw.get("img_model"), str) else None,
+            os.getenv("OPENROUTER_IMG_MODEL"),
         )
-        proxy_from_file = proxy_from_section or _default_str(parser, "proxy")
-
-        use_proxy_or = _coerce_bool_file_or_env(
-            raw.get("use_proxy") if isinstance(raw.get("use_proxy"), str) else None,
-            "OPENROUTER_USE_PROXY",
-            default=True,
+        max_concurrent = _resolve_max_concurrent_with_env(
+            section_mc=raw.get("max_concurrent") if isinstance(raw.get("max_concurrent"), int) else None,
+            env_name="OPENROUTER_MAX_CONCURRENT",
+            default_mc=default_mc,
         )
-
-        if proxy_override:
-            proxy = proxy_override
-        elif os.getenv("OPENROUTER_PROXY"):
-            proxy = os.getenv("OPENROUTER_PROXY")
-        elif use_proxy_or and proxy_from_file:
-            proxy = proxy_from_file
-        else:
-            proxy = None
-        model = raw.get("model") or os.getenv("OPENROUTER_MODEL")
-        max_concurrent = resolve_max_concurrent(
-            raw.get("max_concurrent") if isinstance(raw.get("max_concurrent"), int) else None
-        )
-        if os.getenv("OPENROUTER_MAX_CONCURRENT"):
-            try:
-                max_concurrent = int(os.getenv("OPENROUTER_MAX_CONCURRENT", ""))
-            except ValueError:
-                pass
         if not model:
             raise ValueError(
-                "Model is required. Set it in .env under [openrouter] model "
-                "or via OPENROUTER_MODEL env var."
+                "Image model is required. Set it in .env under [openrouter] img_model "
+                "or via OPENROUTER_IMG_MODEL env var."
             )
         if not max_concurrent or max_concurrent < 1:
             raise ValueError(
                 "max_concurrent is required (>= 1). Set it in [DEFAULT] or [openrouter] "
                 "max_concurrent or OPENROUTER_MAX_CONCURRENT."
             )
-        mgmt_env = (os.getenv("OPENROUTER_MANAGEMENT_API_KEY") or "").strip()
         mgmt_file = raw.get("management_api_key")
-        mgmt_key = mgmt_env or (
-            mgmt_file.strip()
-            if isinstance(mgmt_file, str) and mgmt_file.strip()
-            else None
+        mgmt_key = _first_nonempty_str(
+            os.getenv("OPENROUTER_MANAGEMENT_API_KEY"),
+            mgmt_file if isinstance(mgmt_file, str) else None,
         )
         return Config(
             provider=provider,
             api_key=api_key,
-            proxy=proxy if isinstance(proxy, str) else None,
+            proxy=proxy,
             model=str(model),
             max_concurrent=int(max_concurrent),
             output_dir=output_dir or Path("./output"),
@@ -326,21 +387,23 @@ def load_config(
 
     # Volcengine: proxy optional (see use_proxy / VOLCENGINE_PROXY).
     api_key = _resolve_volcengine_api_key(api_key_override, path)
-    model = volcengine.get("model") or os.getenv("VOLCENGINE_MODEL")
-    max_concurrent = resolve_max_concurrent(
-        _int_from_section(parser[VOLCENGINE_SECTION], "max_concurrent")
-        if parser.has_section(VOLCENGINE_SECTION)
-        else None
+    model = _first_nonempty_str(
+        volcengine.get("img_model"),
+        os.getenv("VOLCENGINE_IMG_MODEL"),
     )
-    if os.getenv("VOLCENGINE_MAX_CONCURRENT"):
-        try:
-            max_concurrent = int(os.getenv("VOLCENGINE_MAX_CONCURRENT", ""))
-        except ValueError:
-            pass
+    max_concurrent = _resolve_max_concurrent_with_env(
+        section_mc=(
+            _int_from_section(parser[VOLCENGINE_SECTION], "max_concurrent")
+            if parser.has_section(VOLCENGINE_SECTION)
+            else None
+        ),
+        env_name="VOLCENGINE_MAX_CONCURRENT",
+        default_mc=default_mc,
+    )
     if not model:
         raise ValueError(
-            "Model is required. Set it in .env under [volcengine] model "
-            "or via VOLCENGINE_MODEL env var."
+            "Image model is required. Set it in .env under [volcengine] img_model "
+            "or via VOLCENGINE_IMG_MODEL env var."
         )
     base_url = volcengine.get("base_url") or os.getenv("VOLCENGINE_BASE_URL")
     image_size = (
@@ -439,3 +502,120 @@ def get_api_key(
 ) -> str | None:
     """Resolve OpenRouter API key with priority: CLI > OPENROUTER_API_KEY env > .env [openrouter]."""
     return _resolve_openrouter_api_key(cli_value, config_path)
+
+
+def _resolve_valyu_api_key(
+    cli_value: str | None,
+    config_path: Path | None,
+) -> str | None:
+    if cli_value and cli_value.strip():
+        return cli_value.strip()
+    env_key = os.getenv("VALYU_API_KEY")
+    if env_key and env_key.strip():
+        return env_key.strip()
+    path = config_path or DEFAULT_CONFIG_PATH
+    parser = _parser_from_env_path(path)
+    valyu = _load_valyu_from_parser(parser)
+    k = valyu.get("api_key")
+    return k if k else None
+
+
+def _resolve_openrouter_proxy(
+    parser: ConfigParser,
+    *,
+    proxy_override: str | None,
+) -> str | None:
+    openrouter = _load_openrouter_from_parser(parser)
+    proxy_section = openrouter.get("proxy")
+    proxy_from_section = (
+        proxy_section.strip()
+        if isinstance(proxy_section, str) and proxy_section.strip()
+        else None
+    )
+    proxy_from_file = proxy_from_section or _default_str(parser, "proxy")
+    use_proxy_or = _coerce_bool_file_or_env(
+        openrouter.get("use_proxy") if isinstance(openrouter.get("use_proxy"), str) else None,
+        "OPENROUTER_USE_PROXY",
+        default=True,
+    )
+    if proxy_override:
+        return proxy_override
+    if os.getenv("OPENROUTER_PROXY"):
+        return os.getenv("OPENROUTER_PROXY")
+    if use_proxy_or and proxy_from_file:
+        return proxy_from_file
+    return None
+
+
+def load_outline_config(
+    config_path: Path | None = None,
+    *,
+    valyu_api_key_override: str | None = None,
+    openrouter_api_key_override: str | None = None,
+    txt_model_override: str | None = None,
+    proxy_override: str | None = None,
+    valyu_mode_override: DeepResearchMode | None = None,
+) -> OutlineConfig:
+    """Load configuration for the outline CLI (Valyu + OpenRouter text).
+
+    Does not require image provider settings; only outline-specific keys.
+    """
+    path = config_path or DEFAULT_CONFIG_PATH
+    parser = _parser_from_env_path(path)
+    openrouter = _load_openrouter_from_parser(parser)
+    volcengine = _load_volcengine_from_parser(parser)
+    valyu = _load_valyu_from_parser(parser)
+    default_mc = _default_max_concurrent(parser)
+
+    valyu_api_key = _resolve_valyu_api_key(valyu_api_key_override, path)
+    openrouter_api_key = _resolve_openrouter_api_key(openrouter_api_key_override, path)
+
+    def _section_txt_model(section: dict[str, str | int | None] | dict[str, str | None]) -> str:
+        raw = section.get("txt_model")
+        return raw.strip() if isinstance(raw, str) and raw.strip() else ""
+
+    txt_model = (
+        (txt_model_override or "").strip()
+        or (os.getenv("OPENROUTER_TXT_MODEL") or "").strip()
+        or (os.getenv("VOLCENGINE_TXT_MODEL") or "").strip()
+        or _section_txt_model(openrouter)
+        or _section_txt_model(volcengine)
+    )
+
+    mode_raw = (
+        (valyu_mode_override or "").strip().lower()
+        if valyu_mode_override
+        else (
+            (os.getenv("VALYU_MODE") or "").strip().lower()
+            or (valyu.get("mode") or "").strip().lower()
+            or "standard"
+        )
+    )
+    if mode_raw not in ("fast", "standard", "heavy", "max"):
+        raise ValueError(
+            f"Invalid Valyu mode {mode_raw!r}. Use fast, standard, heavy, or max."
+        )
+    valyu_mode: DeepResearchMode = mode_raw  # type: ignore[assignment]
+
+    max_concurrent = _resolve_max_concurrent_with_env(
+        section_mc=(
+            openrouter.get("max_concurrent")
+            if isinstance(openrouter.get("max_concurrent"), int)
+            else None
+        ),
+        env_name="OPENROUTER_MAX_CONCURRENT",
+        default_mc=default_mc,
+    )
+    if not max_concurrent or max_concurrent < 1:
+        max_concurrent = 4
+
+    proxy = _resolve_openrouter_proxy(parser, proxy_override=proxy_override)
+
+    return OutlineConfig(
+        valyu_api_key=valyu_api_key,
+        valyu_mode=valyu_mode,
+        openrouter_api_key=openrouter_api_key,
+        txt_model=txt_model,
+        proxy=proxy,
+        max_concurrent=int(max_concurrent),
+    )

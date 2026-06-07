@@ -1,0 +1,58 @@
+---
+description: Security rules for .env, API keys, and secrets
+alwaysApply: true
+---
+
+# .env & Secrets Security
+
+Treat `.env` and all API keys as **confidential**. Never expose, commit, or hardcode real credentials.
+
+## Files
+
+| File | Rule |
+|------|------|
+| `.env` | Local secrets only — **never commit**, **never stage**, **never paste contents** into chat, commits, PRs, or docs |
+| `.env.example` | Template only — use placeholders like `your-openrouter-api-key-here`; no real keys |
+| `.gitignore` | Keep `.env` listed; do not remove it |
+
+## Code & Docs
+
+- Load secrets via `load_dotenv()` + `src/core/config.py` or documented env vars (`OPENROUTER_API_KEY`, `VALYU_API_KEY`, etc.).
+- **Never** hardcode API keys, tokens, or proxy credentials in source, tests, README, or examples.
+- **Never** log, print, or echo full API keys — redact to `sk-…last4` at most when debugging is unavoidable.
+- CLI `--api-key` flags are for local override; document env vars, not real values.
+
+## Agent Behavior
+
+When editing or reviewing:
+
+1. **Do not read `.env`** unless the user explicitly asks to debug a config issue — prefer `.env.example` and `src/core/config.py`.
+2. **Refuse to commit `.env`** — warn the user if they request it; stage only `.env.example` when updating config templates.
+3. **Scan diffs** before commits for accidental secrets (`sk-or-`, `sk-`, `api_key =` with real-looking values, bearer tokens).
+4. If a secret appears in tracked files, recommend rotation and immediate removal from git history (do not force-push unless the user explicitly requests it).
+
+## Adding New Config
+
+When introducing a new secret or provider:
+
+1. Add a placeholder to `.env.example` with a comment explaining purpose and CLI/env override.
+2. Load it through `src/core/config.py` — not ad-hoc `open(".env")` reads scattered in modules.
+3. Document the env var name in README — never a sample real key.
+
+## Examples
+
+```ini
+# ✅ GOOD — .env.example
+api_key = your-valyu-api-key-here
+
+# ❌ BAD — any tracked file
+api_key = sk-or-v1-abc123realkey
+```
+
+```python
+# ✅ GOOD
+config = load_outline_config(openrouter_api_key_override=api_key)
+
+# ❌ BAD
+client = OpenRouterClient(api_key="sk-or-v1-real-key-here")
+```

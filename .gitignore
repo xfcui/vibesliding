@@ -3,7 +3,12 @@
 
 # Output directories (timestamped and default)
 projects/
-output_*/
+work/
+outline_*/
+slides_*/
+
+# Test / coverage artifacts
+.coverage
 
 # Python cache
 __pycache__/

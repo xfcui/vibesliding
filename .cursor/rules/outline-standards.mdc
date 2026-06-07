@@ -70,6 +70,7 @@ Use exactly these three slide categories:
 
 Write `[Visual:]` prompts as production-ready art direction that tells the slide's story faster than decoration or text alone.
 
+- **Visual style ownership:** `[Visual:]` owns layout, composition, diagram language, icon treatment, recurring motifs, and animation intent. Do NOT restate these in the appendix — define them here per slide (or inherit from style reference images).
 - Specify the focal object, foreground/background structure, and layout pattern: split-screen, grid, pipeline, roadmap, or system diagram.
 - Show the narrative visually through contrast, sequence, hierarchy, cause/effect, before/after, or movement through a workflow.
 - Preserve deck continuity with recurring motifs such as beams, nodes, panels, icons, section colors, or progress markers.
@@ -86,11 +87,10 @@ Write `[Speech:]` as natural presenter narration.
 
 ## Appendix Requirements
 
-The appendix defines reusable deck-wide constraints:
+The appendix defines **text-describable** deck-wide constraints only. Do NOT define layout, composition, diagram, icon, motif, or animation styles here — those are visual styles owned by each slide's `[Visual:]` tag and the style reference images.
 
-- **Theme:** Colors, background, accents
-- **Fonts:** Title/body fonts and sizes
-- **Layout:** Aspect ratio, spacing, split ratios
-- **Animations:** Transition styles
-- **Icons:** Icon set, size, color
-- **Diagrams:** Shared diagram style rules
+- **Theme:** Color palette with hex codes (background, primary accent, secondary accent, warning/de-emphasis colors)
+- **Fonts:** Title, body, and code fonts with weights and point sizes
+- **Format:** Optional numeric constants only (16:9 aspect ratio, safe-margin %, minimum contrast ratio)
+
+Do not duplicate visual direction between the appendix and `[Visual:]` tags. If a style is easier to show than to write (layout, diagrams, icons, motifs), put it in `[Visual:]` only.

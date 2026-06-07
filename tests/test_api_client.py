@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 import httpx
-from src.api_client import (
+from src.core.api_client import (
     OpenRouterClient,
     VolcengineClient,
     _credits_timeout,
@@ -43,6 +43,44 @@ def test_retry_predicate_skips_permanent_http_errors() -> None:
     assert _is_retryable_exception(_status_error(500))
     assert _is_retryable_exception(httpx.ConnectError("connect failed"))
     assert _is_retryable_exception(httpx.ReadTimeout("read timed out"))
+
+@pytest.mark.asyncio
+async def test_extract_text_success(client) -> None:
+    data = {"choices": [{"message": {"content": "  hello outline  "}}]}
+    assert client._extract_text(data) == "hello outline"
+
+
+@pytest.mark.asyncio
+async def test_extract_text_failure(client) -> None:
+    with pytest.raises(ValueError, match="No text content"):
+        client._extract_text({"choices": [{"message": {"content": ""}}]})
+
+
+@pytest.mark.asyncio
+async def test_complete_text_mocked(client, respx_mock) -> None:
+    respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "outline markdown"}}]},
+        )
+    )
+    result = await client.complete_text("write outline", "system rules")
+    assert result == "outline markdown"
+
+
+@pytest.mark.asyncio
+async def test_complete_text_parallel_mocked(client, respx_mock) -> None:
+    respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "outline markdown"}}]},
+        )
+    )
+    prompts = [("outline 16", "system"), ("outline 25", "system")]
+    results = await client.complete_text_parallel(prompts, desc="Outlines")
+    assert len(results) == 2
+    assert all(result == "outline markdown" for result in results)
+
 
 @pytest.mark.asyncio
 async def test_extract_image_success(client, mock_api_response, mock_image_bytes):

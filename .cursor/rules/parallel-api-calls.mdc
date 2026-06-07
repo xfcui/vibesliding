@@ -1,0 +1,66 @@
+---
+description: Parallel API calls with tqdm progress bars for external service requests
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Parallel API Calls
+
+Use **parallel API calls with a tqdm progress bar** whenever multiple independent requests can run at once.
+
+## When to Parallelize
+
+- **Do parallelize:** Multiple independent image generations, text completions, or batched prompts with no ordering dependency.
+- **Do not parallelize:** User-interactive selection loops, tasks that depend on a prior result (e.g. style content refs need `base_bytes`), single long-running jobs polled until done, or one-off lightweight calls (e.g. credits check).
+
+## Project Conventions
+
+Reuse existing helpers in `src/core/api_client.py` — do not roll ad-hoc `asyncio.gather` without tqdm.
+
+| Workload | Use | Progress label (`desc`) |
+|----------|-----|-------------------------|
+| Image batches | `client.generate_images_parallel(prompts, desc=...)` | `"Slide images"`, `"Style references"` |
+| Text batches | `client.complete_text_parallel(prompts, desc=...)` | `"Outlines"` |
+| Long poll loops | `TqdmProgressReporter` in `src/research/deepresearch.py` | `"DeepResearch"` |
+
+## Implementation Rules
+
+1. **Batch prompts** — Build all prompts first, then issue one parallel call (e.g. all slides × copies in a single `generate_images_parallel`, not per-slide loops).
+2. **Shared HTTP client** — Parallel paths must use the shared `httpx.AsyncClient` inside `_run_parallel_api_calls`; do not create a new client per request.
+3. **Concurrency controls** — Respect `max_concurrent` semaphore and `AsyncRateLimiter` on the client; pass `max_concurrent` from config.
+4. **Contextual `desc`** — Pass a short, user-facing tqdm label for each workflow (not generic `"API calls"`).
+5. **Error handling** — Parallel helpers return `list[Result | Exception]`; callers must check `isinstance(result, Exception)` and raise with context.
+6. **Callbacks** — Use `on_result` when work should happen as each call completes (e.g. save images incrementally).
+
+## Examples
+
+```python
+# ✅ GOOD — one batched parallel call with tqdm
+results = await client.generate_images_parallel(
+    all_prompts,
+    on_result=save_callback,
+    desc="Slide images",
+)
+
+# ✅ GOOD — multiple outline variants in parallel
+results = await client.complete_text_parallel(
+    [(user_prompt, system_prompt) for user_prompt in user_prompts],
+    model=text_model,
+    desc="Outlines",
+)
+
+# ❌ BAD — sequential loop over independent API calls
+for prompt in prompts:
+    await client.complete_text(prompt, system_prompt)
+
+# ❌ BAD — parallel without progress feedback
+await asyncio.gather(*[client.complete_text(p, s) for p, s in prompts])
+```
+
+## Adding New API Workloads
+
+When introducing a new external API integration:
+
+1. Add a `*_parallel` method on the client (or extend `_run_parallel_api_calls`) if more than one call can run concurrently.
+2. Wire tqdm via the shared helper — never skip the progress bar for multi-call batches.
+3. For poll-based long runners, use `TqdmProgressReporter` or an equivalent tqdm postfix updater; keep `make_progress_printer` only for non-CLI/programmatic consumers.

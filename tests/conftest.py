@@ -1,7 +1,7 @@
 import base64
 import json
 import pytest
-from src.api_client import OpenRouterClient
+from src.core.api_client import OpenRouterClient
 
 @pytest.fixture
 def mock_image_bytes():

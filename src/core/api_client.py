@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any, Final, NamedTuple, Optional, Union
+from typing import Any, Final, NamedTuple, Union
 
 import httpx
 from tqdm import tqdm
@@ -47,15 +47,32 @@ DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)"
 SLIDE_ASPECT_RATIO: Final[str] = "16:9"
 SLIDE_IMAGE_SIZE: Final[str] = "2K"
 
-ImagePrompt = tuple[
-    str,
-    Optional[str],
-    Optional[list[bytes]],
-    Optional[list[bytes]],
-    Optional[list[str]],
-]
+
+class ImagePrompt(NamedTuple):
+    """Prompt bundle for parallel image generation.
+
+    ``article_pdfs`` is reserved for future PDF context extraction and is
+    currently unused by both image clients.
+    """
+
+    prompt: str
+    system_prompt: str | None
+    reference_images: list[bytes] | None
+    article_pdfs: list[bytes] | None
+    article_texts: list[str] | None
+
+
+class TextPrompt(NamedTuple):
+    """Prompt bundle for parallel text completion."""
+
+    prompt: str
+    system_prompt: str | None
+
+
 OnImageResult = Callable[[int, Union[bytes, Exception]], None]
+OnTextResult = Callable[[int, Union[str, Exception]], None]
 GenerateImageFn = Callable[[httpx.AsyncClient, ImagePrompt], Awaitable[bytes]]
+CompleteTextFn = Callable[[httpx.AsyncClient, TextPrompt], Awaitable[str]]
 
 
 def _image_timeout() -> httpx.Timeout:
@@ -86,6 +103,20 @@ def _is_retryable_exception(exc: BaseException) -> bool:
             ValueError,
             json.JSONDecodeError,
         ),
+    )
+
+
+def _image_api_retry():
+    """Shared tenacity retry decorator for image/text API calls."""
+    return retry(
+        stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
+        wait=wait_exponential_jitter(
+            initial=DEFAULT_RETRY_WAIT_INITIAL,
+            max=DEFAULT_RETRY_WAIT_MAX,
+        ),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        retry=retry_if_exception(_is_retryable_exception),
+        reraise=True,
     )
 
 
@@ -131,16 +162,18 @@ class CreditsFetchOutcome(NamedTuple):
     error: str | None = None
 
 
-async def _run_parallel_image_generation(
+async def _run_parallel_api_calls(
     *,
-    prompts: list[ImagePrompt],
+    total: int,
     max_concurrent: int,
     proxy: str | None,
-    generate_fn: GenerateImageFn,
-    on_result: OnImageResult | None = None,
-) -> list[bytes | Exception]:
-    """Run image jobs concurrently and invoke *on_result* as each one finishes."""
-    total = len(prompts)
+    desc: str,
+    unit: str,
+    run_one: Callable[[httpx.AsyncClient, int], Awaitable[tuple[int, Any]]],
+    on_result: Callable[[int, Any], None] | None = None,
+    missing_error: str,
+) -> list[Any]:
+    """Run API jobs concurrently with a tqdm progress bar."""
     limits = httpx.Limits(
         max_connections=max_concurrent,
         max_keepalive_connections=max_concurrent,
@@ -150,27 +183,88 @@ async def _run_parallel_image_generation(
         timeout=_image_timeout(),
         limits=limits,
     ) as client:
-        with tqdm(total=total, desc="API calls", unit="call") as pbar:
+        with tqdm(total=total, desc=desc, unit=unit) as pbar:
 
-            async def _run_one(index: int, prompt: ImagePrompt) -> tuple[int, bytes | Exception]:
+            async def _wrapped(index: int) -> tuple[int, Any]:
                 try:
-                    return index, await generate_fn(client, prompt)
-                except Exception as exc:
-                    return index, exc
+                    return await run_one(client, index)
                 finally:
                     pbar.update(1)
 
-            tasks = [
-                asyncio.create_task(_run_one(index, prompt))
-                for index, prompt in enumerate(prompts)
-            ]
-            results: list[bytes | Exception | None] = [None] * total
+            tasks = [asyncio.create_task(_wrapped(index)) for index in range(total)]
+            results: list[Any | None] = [None] * total
             for task in asyncio.as_completed(tasks):
                 index, result = await task
                 results[index] = result
                 if on_result is not None:
                     on_result(index, result)
-            return [r if r is not None else RuntimeError("Missing image result") for r in results]
+            return [
+                r if r is not None else RuntimeError(missing_error) for r in results
+            ]
+
+
+async def _run_parallel_image_generation(
+    *,
+    prompts: list[ImagePrompt],
+    max_concurrent: int,
+    proxy: str | None,
+    generate_fn: GenerateImageFn,
+    on_result: OnImageResult | None = None,
+    desc: str = "API calls",
+) -> list[bytes | Exception]:
+    """Run image jobs concurrently and invoke *on_result* as each one finishes."""
+    total = len(prompts)
+
+    async def _run_one(
+        client: httpx.AsyncClient, index: int
+    ) -> tuple[int, bytes | Exception]:
+        try:
+            return index, await generate_fn(client, prompts[index])
+        except Exception as exc:
+            return index, exc
+
+    return await _run_parallel_api_calls(
+        total=total,
+        max_concurrent=max_concurrent,
+        proxy=proxy,
+        desc=desc,
+        unit="call",
+        run_one=_run_one,
+        on_result=on_result,
+        missing_error="Missing image result",
+    )
+
+
+async def _run_parallel_text_completions(
+    *,
+    prompts: list[TextPrompt],
+    max_concurrent: int,
+    proxy: str | None,
+    complete_fn: CompleteTextFn,
+    desc: str = "API calls",
+    on_result: OnTextResult | None = None,
+) -> list[str | Exception]:
+    """Run text completion jobs concurrently with a tqdm progress bar."""
+    total = len(prompts)
+
+    async def _run_one(
+        client: httpx.AsyncClient, index: int
+    ) -> tuple[int, str | Exception]:
+        try:
+            return index, await complete_fn(client, prompts[index])
+        except Exception as exc:
+            return index, exc
+
+    return await _run_parallel_api_calls(
+        total=total,
+        max_concurrent=max_concurrent,
+        proxy=proxy,
+        desc=desc,
+        unit="call",
+        run_one=_run_one,
+        on_result=on_result,
+        missing_error="Missing text result",
+    )
 
 
 def _image_bytes_to_data_url(image_bytes: bytes) -> str:
@@ -185,7 +279,83 @@ def _image_bytes_to_data_url(image_bytes: bytes) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-class OpenRouterClient:
+def _article_context_from_prompt(prompt: ImagePrompt) -> str | None:
+    """Combine article texts into assistant context (PDFs not yet supported)."""
+    if prompt.article_texts:
+        return "\n\n---\n\n".join(prompt.article_texts)
+    return None
+
+
+def _coerce_image_prompt(prompt: ImagePrompt | tuple[str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None]) -> ImagePrompt:
+    """Accept legacy 5-tuples or ImagePrompt instances."""
+    if isinstance(prompt, ImagePrompt):
+        return prompt
+    return ImagePrompt(*prompt)
+
+
+class _BaseImageClient:
+    """Shared concurrency, rate limiting, and parallel generation for image clients."""
+
+    def __init__(
+        self,
+        *,
+        max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+        proxy: str | None = None,
+        min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
+    ) -> None:
+        self.max_concurrent = max_concurrent
+        self._proxy = proxy
+        self._semaphore: asyncio.Semaphore | None = None
+        self._rate_limiter = AsyncRateLimiter(min_request_interval)
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        """Get or create semaphore for the current event loop."""
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        return self._semaphore
+
+    async def _generate_single_image(
+        self,
+        client: httpx.AsyncClient,
+        prompt: str,
+        system_prompt: str | None = None,
+        reference_images: list[bytes] | None = None,
+        assistant_context: str | None = None,
+    ) -> bytes:
+        raise NotImplementedError
+
+    async def generate_images_parallel(
+        self,
+        prompts: list[ImagePrompt],
+        on_result: OnImageResult | None = None,
+        *,
+        desc: str = "API calls",
+    ) -> list[bytes | Exception]:
+        """Generate multiple images in parallel with progress tracking."""
+
+        async def _generate_one(client: httpx.AsyncClient, raw_prompt: ImagePrompt) -> bytes:
+            prompt = _coerce_image_prompt(raw_prompt)
+            context = _article_context_from_prompt(prompt)
+            return await self._generate_single_image(
+                client,
+                prompt.prompt,
+                prompt.system_prompt,
+                prompt.reference_images,
+                context,
+            )
+
+        return await _run_parallel_image_generation(
+            prompts=prompts,
+            max_concurrent=self.max_concurrent,
+            proxy=self._proxy,
+            generate_fn=_generate_one,
+            on_result=on_result,
+            desc=desc,
+        )
+
+
+class OpenRouterClient(_BaseImageClient):
     """Async client for OpenRouter image generation with optional proxy and retry."""
 
     BASE_URL: Final[str] = DEFAULT_OPENROUTER_BASE
@@ -199,20 +369,14 @@ class OpenRouterClient:
         management_api_key: str | None = None,
         min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
     ) -> None:
+        super().__init__(
+            max_concurrent=max_concurrent,
+            proxy=proxy,
+            min_request_interval=min_request_interval,
+        )
         self.api_key = api_key
         self._management_api_key = (management_api_key or "").strip() or None
-        self._proxy = proxy
         self._model = model
-        self.max_concurrent = max_concurrent
-        self._semaphore: asyncio.Semaphore | None = None
-        self._rate_limiter = AsyncRateLimiter(min_request_interval)
-
-    @property
-    def semaphore(self) -> asyncio.Semaphore:
-        """Get or create semaphore for the current event loop."""
-        if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self.max_concurrent)
-        return self._semaphore
 
     def _build_messages(
         self,
@@ -246,9 +410,28 @@ class OpenRouterClient:
         messages.append({"role": "user", "content": content})
         return messages
 
+    def _extract_text(self, data: dict[str, Any]) -> str:
+        """Extract text content from OpenRouter chat completion response."""
+        try:
+            choices = data.get("choices")
+            if not choices:
+                raise ValueError("No choices in response")
+
+            message = choices[0].get("message")
+            if not message:
+                raise ValueError("No message in first choice")
+
+            content = message.get("content")
+            if not content or not str(content).strip():
+                raise ValueError("No text content in response")
+
+            return str(content).strip()
+        except (KeyError, IndexError, TypeError) as e:
+            raise ValueError(f"Failed to extract text from response: {e}") from e
+
     def _extract_image(self, data: dict[str, Any]) -> bytes:
         """Extract image bytes from OpenRouter chat completion response.
-        
+
         Raises:
             ValueError: If the response format is invalid or image data is missing.
         """
@@ -256,28 +439,28 @@ class OpenRouterClient:
             choices = data.get("choices")
             if not choices:
                 raise ValueError("No choices in response")
-            
+
             message = choices[0].get("message")
             if not message:
                 raise ValueError("No message in first choice")
-            
+
             images = message.get("images")
             if not images:
                 raise ValueError("No images in response")
-            
+
             first_image = images[0]
             url = (
-                first_image.get("image_url", {}).get("url") 
+                first_image.get("image_url", {}).get("url")
                 or first_image.get("imageUrl", {}).get("url")
             )
             if not url:
                 raise ValueError("No image URL in first image")
-            
+
             # Parse data URL: data:image/png;base64,<payload>
             match = DATA_URL_PATTERN.match(url)
             if not match:
                 raise ValueError(f"Image URL is not a valid base64 data URL: {url[:50]}...")
-            
+
             return base64.standard_b64decode(match.group(1))
         except (KeyError, IndexError, TypeError) as e:
             raise ValueError(f"Failed to extract image from response: {e}") from e
@@ -352,32 +535,9 @@ class OpenRouterClient:
         reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
     ) -> bytes:
-        """Generate a single image with retry logic.
-        
-        Args:
-            client: HTTP client for making requests
-            prompt: User prompt for image generation
-            system_prompt: Optional system instructions
-            reference_images: Optional reference image bytes (one or more)
-            assistant_context: Optional assistant context
-            
-        Returns:
-            Generated image as bytes
-            
-        Raises:
-            httpx.HTTPStatusError: If API returns error status
-            ValueError: If response format is invalid
-        """
-        @retry(
-            stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
-            wait=wait_exponential_jitter(
-                initial=DEFAULT_RETRY_WAIT_INITIAL,
-                max=DEFAULT_RETRY_WAIT_MAX,
-            ),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
-            retry=retry_if_exception(_is_retryable_exception),
-            reraise=True,
-        )
+        """Generate a single image with retry logic."""
+
+        @_image_api_retry()
         async def _do_request() -> bytes:
             await self._rate_limiter.acquire()
             async with self.semaphore:
@@ -402,44 +562,93 @@ class OpenRouterClient:
 
         return await _do_request()
 
-    async def generate_images_parallel(
+    async def _complete_text_with_client(
         self,
-        prompts: list[ImagePrompt],
-        on_result: OnImageResult | None = None,
-    ) -> list[bytes | Exception]:
-        """Generate multiple images in parallel with progress tracking.
+        client: httpx.AsyncClient,
+        prompt: str,
+        system_prompt: str | None = None,
+        *,
+        model: str | None = None,
+    ) -> str:
+        """Generate text via OpenRouter chat completions using a shared HTTP client."""
 
-        Args:
-            prompts: List of (prompt, system_prompt, reference_images,
-                article_pdfs, article_texts).
-            on_result: Optional callback invoked as each image finishes, with
-                ``(index, result)`` where *result* is image bytes or an
-                exception for a failed generation.
+        @_image_api_retry()
+        async def _do_request() -> str:
+            await self._rate_limiter.acquire()
+            async with self.semaphore:
+                payload: dict[str, Any] = {
+                    "model": model or self._model,
+                    "messages": self._build_messages(prompt, system_prompt),
+                }
+                response = await client.post(
+                    f"{self.BASE_URL}/chat/completions",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                response.raise_for_status()
+                return self._extract_text(response.json())
 
-        Returns:
-            List of generated images (bytes) or exceptions for failed generations
-        """
-        async def _generate_one(client: httpx.AsyncClient, prompt: ImagePrompt) -> bytes:
-            user_prompt, sys_prompt, ref_images, _article_pdfs, article_texts = prompt
-            # NOTE: PDF content extraction is not implemented yet
-            # For now, combine all article texts as context
-            context = None
-            if article_texts:
-                context = "\n\n---\n\n".join(article_texts)
-            return await self._generate_single_image(
-                client, user_prompt, sys_prompt, ref_images, context
+        return await _do_request()
+
+    async def complete_text(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        *,
+        model: str | None = None,
+    ) -> str:
+        """Generate text via OpenRouter chat completions (no image modalities)."""
+        limits = httpx.Limits(
+            max_connections=self.max_concurrent,
+            max_keepalive_connections=self.max_concurrent,
+        )
+        async with httpx.AsyncClient(
+            proxy=self._proxy,
+            timeout=_image_timeout(),
+            limits=limits,
+        ) as client:
+            return await self._complete_text_with_client(
+                client,
+                prompt,
+                system_prompt,
+                model=model,
             )
 
-        return await _run_parallel_image_generation(
-            prompts=prompts,
+    async def complete_text_parallel(
+        self,
+        prompts: list[TextPrompt | tuple[str, str | None]],
+        *,
+        model: str | None = None,
+        on_result: OnTextResult | None = None,
+        desc: str = "API calls",
+    ) -> list[str | Exception]:
+        """Generate multiple text completions in parallel with progress tracking."""
+        coerced = [
+            prompt if isinstance(prompt, TextPrompt) else TextPrompt(*prompt)
+            for prompt in prompts
+        ]
+
+        async def _complete_one(
+            client: httpx.AsyncClient, text_prompt: TextPrompt
+        ) -> str:
+            return await self._complete_text_with_client(
+                client,
+                text_prompt.prompt,
+                text_prompt.system_prompt,
+                model=model,
+            )
+
+        return await _run_parallel_text_completions(
+            prompts=coerced,
             max_concurrent=self.max_concurrent,
             proxy=self._proxy,
-            generate_fn=_generate_one,
+            complete_fn=_complete_one,
+            desc=desc,
             on_result=on_result,
         )
 
 
-class VolcengineClient:
+class VolcengineClient(_BaseImageClient):
     """Ark (火山方舟) Seedream via ``POST .../images/generations``.
 
     Matches the OpenAI-compatible ``client.images.generate`` flow:
@@ -464,9 +673,13 @@ class VolcengineClient:
         proxy: str | None = None,
         min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
     ) -> None:
+        super().__init__(
+            max_concurrent=max_concurrent,
+            proxy=proxy,
+            min_request_interval=min_request_interval,
+        )
         self.api_key = api_key
         self._model = model
-        self.max_concurrent = max_concurrent
         self._base_url = (base_url or DEFAULT_VOLCENGINE_BASE).rstrip("/")
         self._image_size = image_size
         rf = response_format.strip().lower()
@@ -474,15 +687,6 @@ class VolcengineClient:
             raise ValueError("response_format must be 'url' or 'b64_json'")
         self._response_format = rf
         self._watermark = watermark
-        self._proxy = proxy
-        self._semaphore: asyncio.Semaphore | None = None
-        self._rate_limiter = AsyncRateLimiter(min_request_interval)
-
-    @property
-    def semaphore(self) -> asyncio.Semaphore:
-        if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self.max_concurrent)
-        return self._semaphore
 
     @staticmethod
     def _merge_prompt(
@@ -528,16 +732,7 @@ class VolcengineClient:
         reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
     ) -> bytes:
-        @retry(
-            stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
-            wait=wait_exponential_jitter(
-                initial=DEFAULT_RETRY_WAIT_INITIAL,
-                max=DEFAULT_RETRY_WAIT_MAX,
-            ),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
-            retry=retry_if_exception(_is_retryable_exception),
-            reraise=True,
-        )
+        @_image_api_retry()
         async def _do_request() -> bytes:
             await self._rate_limiter.acquire()
             async with self.semaphore:
@@ -568,25 +763,3 @@ class VolcengineClient:
                 return await self._extract_image_bytes(client, response.json())
 
         return await _do_request()
-
-    async def generate_images_parallel(
-        self,
-        prompts: list[ImagePrompt],
-        on_result: OnImageResult | None = None,
-    ) -> list[bytes | Exception]:
-        async def _generate_one(client: httpx.AsyncClient, prompt: ImagePrompt) -> bytes:
-            user_prompt, sys_prompt, ref_images, _article_pdfs, article_texts = prompt
-            context = None
-            if article_texts:
-                context = "\n\n---\n\n".join(article_texts)
-            return await self._generate_single_image(
-                client, user_prompt, sys_prompt, ref_images, context
-            )
-
-        return await _run_parallel_image_generation(
-            prompts=prompts,
-            max_concurrent=self.max_concurrent,
-            proxy=self._proxy,
-            generate_fn=_generate_one,
-            on_result=on_result,
-        )

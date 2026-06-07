@@ -2,7 +2,8 @@ import pytest
 from pathlib import Path
 from PIL import Image
 
-from src.output import (
+from src.core.export import (
+    build_contact_sheet,
     collect_slide_image_paths,
     create_pdf_from_images,
     rebuild_combined_pdf,
@@ -65,3 +66,39 @@ def test_rebuild_combined_pdf(tmp_path):
     assert count == 2
     assert pdf_path == tmp_path / "slide_combined.pdf"
     assert pdf_path.exists()
+
+
+def test_build_contact_sheet(tmp_path):
+    images: list[bytes] = []
+    for color in ("red", "green", "blue", "yellow"):
+        buf = tmp_path / f"{color}.png"
+        Image.new("RGB", (120, 80), color=color).save(buf)
+        images.append(buf.read_bytes())
+
+    sheet_path = tmp_path / "choices.png"
+    build_contact_sheet(images, sheet_path, columns=2)
+
+    assert sheet_path.exists()
+    with Image.open(sheet_path) as sheet:
+        assert sheet.size == (240, 160)
+
+
+def test_build_contact_sheet_with_title(tmp_path):
+    images: list[bytes] = []
+    for color in ("red", "green"):
+        buf = tmp_path / f"{color}.png"
+        Image.new("RGB", (100, 60), color=color).save(buf)
+        images.append(buf.read_bytes())
+
+    sheet_path = tmp_path / "choices_titled.png"
+    build_contact_sheet(images, sheet_path, columns=2, title="BASE — pick 1-2")
+
+    assert sheet_path.exists()
+    with Image.open(sheet_path) as sheet:
+        assert sheet.width == 200
+        assert sheet.height > 60
+
+
+def test_build_contact_sheet_empty_raises(tmp_path):
+    with pytest.raises(ValueError, match="At least one image"):
+        build_contact_sheet([], tmp_path / "empty.png")

@@ -1,14 +1,19 @@
-"""Markdown parser - extracts slides from H2 headings."""
+"""Outline markdown parser - extracts slides from H2 headings."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final, List
+from typing import Final
 
 # Constants
 H2_PATTERN: Final[re.Pattern] = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 SLIDE_PREFIX_PATTERN: Final[re.Pattern] = re.compile(r"^Slide\s+\d+:\s*", re.IGNORECASE)
+STYLE_KEYWORDS: Final[tuple[str, ...]] = (
+    "global visual requirements",
+    "visual style",
+    "design standards",
+)
 
 
 @dataclass
@@ -56,3 +61,12 @@ def parse_markdown(markdown_text: str) -> list[Slide]:
         slides.append(Slide(index=i + 1, title=title, content=content))
 
     return slides
+
+
+def extract_global_style(slides: list[Slide]) -> str | None:
+    """Extract global visual style from slides if present."""
+    for slide in slides:
+        title_lower = slide.title.lower()
+        if any(keyword in title_lower for keyword in STYLE_KEYWORDS):
+            return slide.content
+    return None
