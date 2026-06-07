@@ -14,7 +14,6 @@ from src.core.paths import (
     DEFAULT_WORK_DIR,
     IDEA_FILENAME,
     RESEARCH_FILENAME,
-    SOURCES_FILENAME,
     outline_path_for_slides,
     read_nonempty_text,
 )
@@ -54,7 +53,7 @@ def _parse_slide_counts(spec: str) -> list[int]:
     type=click.Path(path_type=Path),
     default=DEFAULT_WORK_DIR,
     show_default=True,
-    help="Work directory with research.md, idea.md, and optional sources.md.",
+    help="Work directory with research.md and idea.md.",
 )
 @click.option(
     "--slides",
@@ -91,18 +90,12 @@ def main(
 
     research_path = work_dir / RESEARCH_FILENAME
     idea_path = work_dir / IDEA_FILENAME
-    sources_path = work_dir / SOURCES_FILENAME
 
     try:
         idea = read_nonempty_text(idea_path, label="Idea file")
         report = read_nonempty_text(research_path, label="Research file")
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
-
-    if sources_path.is_file():
-        sources_text = sources_path.read_text(encoding="utf-8").strip() or "(No sources returned)"
-    else:
-        sources_text = "(No sources file found)"
 
     config = load_outline_config(
         openrouter_api_key_override=api_key,
@@ -129,7 +122,6 @@ def main(
             client,
             idea=idea,
             report=report,
-            sources_text=sources_text,
             target_slides=slide_counts,
             text_model=config.txt_model,
         )

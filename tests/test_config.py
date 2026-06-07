@@ -293,3 +293,41 @@ def test_volcengine_missing_max_raises(tmp_path: Path) -> None:
             output_dir=tmp_path / "o",
             provider_override="volcengine",
         )
+
+
+def test_valyu_proxy_bypass_by_default(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text(
+        "proxy = socks5://127.0.0.1:1080\n"
+        "provider = openrouter\n\n"
+        "[openrouter]\n"
+        "api_key = sk-or\n"
+        "txt_model = claude\n"
+        "use_proxy = true\n"
+        "[valyu]\n"
+        "api_key = v-key\n",
+        encoding="utf-8",
+    )
+    c = load_outline_config(config_path=env)
+    assert c.proxy == "socks5://127.0.0.1:1080"
+    assert c.valyu_proxy is None  # Bypassed by default!
+
+
+def test_valyu_proxy_opt_in(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text(
+        "proxy = socks5://127.0.0.1:1080\n"
+        "provider = openrouter\n\n"
+        "[openrouter]\n"
+        "api_key = sk-or\n"
+        "txt_model = claude\n"
+        "use_proxy = true\n"
+        "[valyu]\n"
+        "api_key = v-key\n"
+        "use_proxy = true\n",
+        encoding="utf-8",
+    )
+    c = load_outline_config(config_path=env)
+    assert c.proxy == "socks5://127.0.0.1:1080"
+    assert c.valyu_proxy == "socks5://127.0.0.1:1080"
+

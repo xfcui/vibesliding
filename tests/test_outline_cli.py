@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 
-from src.core.paths import IDEA_FILENAME, RESEARCH_FILENAME, SOURCES_FILENAME
+from src.core.paths import IDEA_FILENAME, RESEARCH_FILENAME
 from src.outline.cli import main
 
 
@@ -34,7 +34,6 @@ def test_outline_cli_writes_multiple_outlines(tmp_path: Path) -> None:
     work_dir.mkdir()
     (work_dir / IDEA_FILENAME).write_text("Future of AI coding", encoding="utf-8")
     (work_dir / RESEARCH_FILENAME).write_text("# Report\n\nFindings.", encoding="utf-8")
-    (work_dir / SOURCES_FILENAME).write_text("1. Source", encoding="utf-8")
 
     with (
         patch("src.outline.cli.load_dotenv"),

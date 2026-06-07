@@ -2,22 +2,29 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.research import (
-    format_sources_for_prompt,
     make_progress_printer,
     run_deepresearch,
 )
 from src.research.deepresearch import (
     MODE_POLL_SETTINGS,
+    ResearchState,
     _fetch_status_resilient,
     _is_transient_status_error,
+    clear_research_state,
     format_progress,
+    load_research_state,
     resolve_datasource_ids,
+    resume_deepresearch,
+    run_deepresearch,
+    save_research_state,
+    wait_for_deepresearch_result,
 )
 
 
@@ -52,24 +59,6 @@ class TestFormatProgress:
         printer(SimpleNamespace(status="running", messages=["Planning research", "Gathering sources"]))
         assert len(lines) == 2
         assert "Gathering sources" in lines[1]
-
-
-class TestFormatSources:
-    def test_formats_source_list(self) -> None:
-        sources = [
-            SimpleNamespace(
-                title="Paper A",
-                url="https://example.com/a",
-                snippet="Short snippet",
-            )
-        ]
-        text = format_sources_for_prompt(sources)
-        assert "Paper A" in text
-        assert "https://example.com/a" in text
-        assert "Short snippet" in text
-
-    def test_empty_sources(self) -> None:
-        assert "(No sources returned)" in format_sources_for_prompt([])
 
 
 class TestTransientStatusErrors:
@@ -274,3 +263,112 @@ class TestRunDeepresearch:
         assert len(seen) == 2
         assert seen[0] is running
         assert seen[1] is completed
+
+    def test_saves_and_clears_state_on_success(self, tmp_path: Path) -> None:
+        state_path = tmp_path / "research_state.json"
+        mock_task = SimpleNamespace(deepresearch_id="dr_state")
+        mock_result = SimpleNamespace(
+            success=True,
+            status="completed",
+            output="# Report",
+            sources=[],
+            cost=0.5,
+            deepresearch_id="dr_state",
+            error=None,
+        )
+
+        mock_deepresearch = MagicMock()
+        mock_deepresearch.create.return_value = mock_task
+        mock_deepresearch.status.return_value = mock_result
+
+        mock_valyu = MagicMock()
+        mock_valyu.deepresearch = mock_deepresearch
+
+        with (
+            patch("valyu.Valyu", return_value=mock_valyu),
+            patch("src.research.deepresearch.time.sleep"),
+        ):
+            run_deepresearch(
+                "topic",
+                api_key="key",
+                state_path=state_path,
+            )
+
+        assert not state_path.is_file()
+
+    def test_resume_polls_existing_task(self) -> None:
+        mock_result = SimpleNamespace(
+            success=True,
+            status="completed",
+            output="# Resumed Report",
+            sources=[],
+            cost=0.25,
+            deepresearch_id="dr_resume",
+            error=None,
+        )
+
+        mock_deepresearch = MagicMock()
+        mock_deepresearch.status.return_value = mock_result
+
+        mock_valyu = MagicMock()
+        mock_valyu.deepresearch = mock_deepresearch
+
+        with (
+            patch("valyu.Valyu", return_value=mock_valyu),
+            patch("src.research.deepresearch.time.sleep"),
+        ):
+            result = resume_deepresearch(
+                "dr_resume",
+                api_key="key",
+                mode="fast",
+            )
+
+        assert result.report == "# Resumed Report"
+        mock_deepresearch.create.assert_not_called()
+        mock_deepresearch.status.assert_called()
+
+
+class TestResearchState:
+    def test_round_trip_json(self, tmp_path: Path) -> None:
+        state_path = tmp_path / "research_state.json"
+        original = ResearchState(task_id="dr_abc", mode="heavy")
+        save_research_state(state_path, original)
+        loaded = load_research_state(state_path)
+        assert loaded == original
+
+    def test_clear_removes_file(self, tmp_path: Path) -> None:
+        state_path = tmp_path / "research_state.json"
+        save_research_state(state_path, ResearchState(task_id="dr_x", mode="fast"))
+        clear_research_state(state_path)
+        assert not state_path.is_file()
+
+    def test_resume_clears_state_on_terminal_failure(self, tmp_path: Path) -> None:
+        state_path = tmp_path / "research_state.json"
+        save_research_state(state_path, ResearchState(task_id="dr_fail", mode="fast"))
+
+        mock_result = SimpleNamespace(
+            success=True,
+            status="failed",
+            output="",
+            sources=[],
+            cost=0.0,
+            error="timeout",
+        )
+        mock_deepresearch = MagicMock()
+        mock_deepresearch.status.return_value = mock_result
+        mock_valyu = MagicMock()
+        mock_valyu.deepresearch = mock_deepresearch
+
+        with (
+            patch("valyu.Valyu", return_value=mock_valyu),
+            patch("src.research.deepresearch.time.sleep"),
+            pytest.raises(ValueError, match="Task failed"),
+        ):
+            resume_deepresearch(
+                "dr_fail",
+                api_key="key",
+                mode="fast",
+                state_path=state_path,
+            )
+
+        assert not state_path.is_file()

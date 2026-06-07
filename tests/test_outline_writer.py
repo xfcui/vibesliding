@@ -117,7 +117,6 @@ class TestBuildPrompt:
         prompt = build_outline_user_prompt(
             "My idea",
             "Report text",
-            "1. Source",
             target_slides=8,
         )
         assert "My idea" in prompt
@@ -142,7 +141,6 @@ async def test_write_outline_calls_client_with_standards(
         client,
         idea="Test idea",
         report="Research body",
-        sources_text="1. Source — https://example.com",
         target_slides=5,
         text_model="anthropic/claude-sonnet-4",
         standards_path=standards,
@@ -168,7 +166,6 @@ class TestSharedStylePrompt:
         prompt = build_outline_user_prompt(
             "idea",
             "report",
-            "sources",
             target_slides=16,
             style_scaffold=scaffold,
         )
@@ -196,7 +193,6 @@ async def test_write_outlines_parallel_uses_shared_scaffold(
         client,
         idea="idea",
         report="report",
-        sources_text="sources",
         target_slides=[6, 12],
         standards_path=standards,
     )

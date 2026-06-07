@@ -29,7 +29,7 @@ def parse_pick_spec(spec: str, *, candidates: int) -> dict[str, int]:
         )
 
     picks: dict[str, int] = {}
-    for label, raw in zip(STAGE_ORDER, parts, strict=True):
+    for label, raw in zip(STAGE_ORDER, parts):
         try:
             index = int(raw)
         except ValueError as exc:

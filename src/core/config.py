@@ -121,6 +121,7 @@ class OutlineConfig:
     txt_model: str
     proxy: str | None
     max_concurrent: int
+    valyu_proxy: str | None = None
 
     def validate_research(self) -> None:
         if not self.valyu_api_key or not self.valyu_api_key.strip():
@@ -234,11 +235,17 @@ def _load_volcengine_from_parser(parser: ConfigParser) -> dict[str, str | None]:
 
 
 def _load_valyu_from_parser(parser: ConfigParser) -> dict[str, str | None]:
-    out: dict[str, str | None] = {"api_key": None, "mode": None, "categories": None}
+    out: dict[str, str | None] = {
+        "api_key": None,
+        "mode": None,
+        "categories": None,
+        "use_proxy": None,
+        "proxy": None,
+    }
     if not parser.has_section(VALYU_SECTION):
         return out
     section = parser[VALYU_SECTION]
-    for key in ("api_key", "mode", "categories"):
+    for key in ("api_key", "mode", "categories", "use_proxy", "proxy"):
         value = section.get(key, "").strip()
         if value:
             out[key] = value
@@ -580,6 +587,30 @@ def _resolve_openrouter_proxy(
     return None
 
 
+def _resolve_valyu_proxy(
+    parser: ConfigParser,
+    *,
+    proxy_override: str | None = None,
+) -> str | None:
+    if proxy_override:
+        return proxy_override
+    valyu = _load_valyu_from_parser(parser)
+    use_proxy_valyu = _coerce_bool_file_or_env(
+        valyu.get("use_proxy"),
+        "VALYU_USE_PROXY",
+        default=False,
+    )
+    if not use_proxy_valyu:
+        return None
+
+    valyu_proxy_section = (valyu.get("proxy") or "").strip() or None
+    valyu_proxy_from_file = valyu_proxy_section or _default_str(parser, "proxy")
+
+    if os.getenv("VALYU_PROXY"):
+        return os.getenv("VALYU_PROXY")
+    return valyu_proxy_from_file
+
+
 def load_outline_config(
     config_path: Path | None = None,
     *,
@@ -652,6 +683,7 @@ def load_outline_config(
         max_concurrent = 4
 
     proxy = _resolve_openrouter_proxy(parser, proxy_override=proxy_override)
+    valyu_proxy = _resolve_valyu_proxy(parser)
 
     return OutlineConfig(
         valyu_api_key=valyu_api_key,
@@ -661,4 +693,5 @@ def load_outline_config(
         txt_model=txt_model,
         proxy=proxy,
         max_concurrent=int(max_concurrent),
+        valyu_proxy=valyu_proxy,
     )

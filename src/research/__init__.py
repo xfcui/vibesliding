@@ -2,16 +2,26 @@
 
 from src.research.deepresearch import (
     ResearchResult,
+    ResearchState,
     TqdmProgressReporter,
-    format_sources_for_prompt,
+    clear_research_state,
+    load_research_state,
     make_progress_printer,
+    resume_deepresearch,
     run_deepresearch,
+    save_research_state,
+    wait_for_deepresearch_result,
 )
 
 __all__ = [
     "ResearchResult",
+    "ResearchState",
     "TqdmProgressReporter",
-    "format_sources_for_prompt",
+    "clear_research_state",
+    "load_research_state",
     "make_progress_printer",
+    "resume_deepresearch",
     "run_deepresearch",
+    "save_research_state",
+    "wait_for_deepresearch_result",
 ]

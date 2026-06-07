@@ -95,6 +95,9 @@ python3 -m src.compose.cli --style cover.png --style body.png --article "docs/*.
 | `--mode` | Valyu mode: `fast` / `standard` / `heavy` / `max` |
 | `--categories` | Comma-separated Valyu datasource categories |
 | `--valyu-api-key` | Valyu API key override |
+| `--resume` | Resume polling an in-progress task from `research_state.json` |
+| `--task-id` | Resume a specific Valyu task ID (optional with `--resume`) |
+| `--fresh` | Start a new task even if a resume state file exists |
 
 ### `python3 -m src.outline.cli`
 
@@ -146,8 +149,7 @@ python3 -m src.compose.cli --style cover.png --style body.png --article "docs/*.
 ```
 work/
 ├── idea.md                # presentation seed (title, audience, core message)
-├── research.md            # Valyu DeepResearch report
-├── sources.md             # formatted bibliography for outline generation
+├── research.md            # Valyu DeepResearch report (with inline citations)
 ├── style_base.md          # shared style + narrative scaffold
 ├── outline_16.md          # 16 content-slide outline
 ├── outline_25.md          # 25 content-slide outline

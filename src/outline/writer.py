@@ -89,7 +89,6 @@ def build_outline_system_prompt(standards: str) -> str:
 def build_style_scaffold_prompt(
     idea: str,
     report: str,
-    sources_text: str,
     *,
     target_slides: list[int],
 ) -> str:
@@ -105,9 +104,6 @@ All versions MUST share identical visual style and the same core narrative — l
 
 ## DeepResearch report
 {report.strip()}
-
-## Sources consulted
-{sources_text.strip()}
 
 ## Output format (markdown only — no code fences)
 Produce exactly these sections:
@@ -149,7 +145,6 @@ Do NOT put layout or diagram rules here — those belong in Shared Visual System
 def build_outline_user_prompt(
     idea: str,
     report: str,
-    sources_text: str,
     *,
     target_slides: int,
     style_scaffold: str | None = None,
@@ -197,9 +192,6 @@ Segment the deck into 3-6 sections, placing one transition slide before each sec
 
 ## DeepResearch report
 {report.strip()}
-
-## Sources consulted
-{sources_text.strip()}
 
 ## Requirements
 **Structure:**
@@ -284,7 +276,6 @@ def _outline_prompts_for_targets(
     *,
     idea: str,
     report: str,
-    sources_text: str,
     target_slides: list[int],
     style_scaffold: str | None = None,
     standards_path: Path | None = None,
@@ -298,7 +289,6 @@ def _outline_prompts_for_targets(
             build_outline_user_prompt(
                 idea,
                 report,
-                sources_text,
                 target_slides=count,
                 style_scaffold=style_scaffold,
             ),
@@ -313,7 +303,6 @@ async def write_style_scaffold(
     *,
     idea: str,
     report: str,
-    sources_text: str,
     target_slides: list[int],
     text_model: str | None = None,
     standards_path: Path | None = None,
@@ -324,7 +313,6 @@ async def write_style_scaffold(
     user_prompt = build_style_scaffold_prompt(
         idea,
         report,
-        sources_text,
         target_slides=target_slides,
     )
     raw = await client.complete_text(
@@ -340,7 +328,6 @@ async def write_outline(
     *,
     idea: str,
     report: str,
-    sources_text: str,
     target_slides: int = 16,
     text_model: str | None = None,
     standards_path: Path | None = None,
@@ -349,7 +336,6 @@ async def write_outline(
     system_prompt, user_prompts = _outline_prompts_for_targets(
         idea=idea,
         report=report,
-        sources_text=sources_text,
         target_slides=[target_slides],
         standards_path=standards_path,
     )
@@ -370,7 +356,6 @@ async def write_outlines_parallel(
     *,
     idea: str,
     report: str,
-    sources_text: str,
     target_slides: list[int],
     text_model: str | None = None,
     standards_path: Path | None = None,
@@ -380,7 +365,6 @@ async def write_outlines_parallel(
         client,
         idea=idea,
         report=report,
-        sources_text=sources_text,
         target_slides=target_slides,
         text_model=text_model,
         standards_path=standards_path,
@@ -388,7 +372,6 @@ async def write_outlines_parallel(
     system_prompt, user_prompts = _outline_prompts_for_targets(
         idea=idea,
         report=report,
-        sources_text=sources_text,
         target_slides=target_slides,
         style_scaffold=style_scaffold,
         standards_path=standards_path,
