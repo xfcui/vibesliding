@@ -2,12 +2,14 @@ import pytest
 from pathlib import Path
 from PIL import Image
 
+from src.core.api_client import STYLE_IMAGE_PIXEL_SIZE
 from src.core.export import (
     build_contact_sheet,
     collect_slide_image_paths,
     create_pdf_from_images,
     rebuild_combined_pdf,
     save_image,
+    save_style_reference_image,
 )
 
 
@@ -16,6 +18,19 @@ def test_save_image(tmp_path):
     data = b"fake-image-data"
     save_image(data, file_path)
     assert file_path.read_bytes() == data
+
+
+def test_save_style_reference_image_downscales_to_1k(tmp_path):
+    src = tmp_path / "source.png"
+    Image.new("RGB", (2560, 1440), color="blue").save(src)
+    out = tmp_path / "style_cover.png"
+    save_style_reference_image(
+        src.read_bytes(),
+        out,
+        target_size=STYLE_IMAGE_PIXEL_SIZE,
+    )
+    with Image.open(out) as img:
+        assert img.size == STYLE_IMAGE_PIXEL_SIZE
 
 
 def test_create_pdf_from_images(tmp_path):

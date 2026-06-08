@@ -22,7 +22,7 @@ Stop wrestling with PowerPoint. Write your content, pick a style, and let AI han
 - 🎯 **Selective Regeneration** — Redo specific slides without starting over
 - ⚡ **Blazing Fast** — Parallel generation with configurable concurrency
 - 📄 **Auto PDF** — All slides combined into one file
-- 🔌 **Multiple Providers** — OpenRouter and Volcengine (Doubao/Seedream)
+- 🔌 **Multiple Providers** — OpenRouter (outline + images) and Volcengine/Doubao Seedream (images)
 
 ## Quick Start
 
@@ -93,11 +93,13 @@ python3 -m src.compose.cli --style cover.png --style body.png --article "docs/*.
 |--------|-------------|
 | `--work` | Work directory (default: `work/`) |
 | `--mode` | Valyu mode: `fast` / `standard` / `heavy` / `max` |
-| `--categories` | Comma-separated Valyu datasource categories |
+| `--categories` | Comma-separated Valyu datasource categories (see below) |
 | `--valyu-api-key` | Valyu API key override |
 | `--resume` | Resume polling an in-progress task from `research_state.json` |
 | `--task-id` | Resume a specific Valyu task ID (optional with `--resume`) |
 | `--fresh` | Start a new task even if a resume state file exists |
+
+Valid `--categories` values: `research`, `healthcare`, `patents`, `markets`, `company`, `economic`, `predictions`, `legal`, `politics`, `cybersecurity`, `transportation`
 
 ### `python3 -m src.outline.cli`
 
@@ -206,14 +208,15 @@ Copy `.env.example` to `.env` and fill in your keys. The file uses INI-style sec
 
 | Section | Used by | Key settings |
 |---------|---------|-------------|
-| *(preamble)* | All steps | `provider`, `max_concurrent`, optional `proxy` |
-| `[valyu]` | Research | `api_key`, `mode`, `categories` |
-| `[openrouter]` | Outline / Style / Compose | `api_key`, `img_model`, `txt_model`, `use_proxy` |
-| `[volcengine]` | Outline / Style / Compose | `api_key`, `img_model`, `txt_model`, `use_proxy` |
+| *(preamble)* | All steps | `provider`, `max_concurrent`, `proxy`, `ark_api_key` |
+| `[valyu]` | Research | `api_key`, `mode`, `categories`, `use_proxy`, `proxy` |
+| `[openrouter]` | Outline / Style / Compose | `api_key`, `management_api_key`, `img_model`, `txt_model`, `max_concurrent`, `use_proxy`, `proxy` |
+| `[volcengine]` | Style / Compose | `api_key`, `img_model`, `txt_model`, `base_url`, `image_size`, `response_format`, `watermark`, `use_proxy`, `proxy` |
 
 - **Research** uses `[valyu]` for DeepResearch
-- **Outline** uses `txt_model` from `[openrouter]` or `[volcengine]`
+- **Outline** uses `txt_model` from `[openrouter]` only (text generation)
 - **Style** and **Compose** use `img_model` from the active `provider`
+- `ark_api_key` in the preamble is an alias for `[volcengine] api_key`
 - Each step is independent — configure each backend separately
 
 ## Examples

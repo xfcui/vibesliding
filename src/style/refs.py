@@ -8,8 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from src.core.api_client import OpenRouterClient, VolcengineClient
-from src.core.export import build_contact_sheet, save_image
+from src.core.api_client import (
+    OpenRouterClient,
+    STYLE_IMAGE_PIXEL_SIZE,
+    STYLE_IMAGE_SIZE,
+    VolcengineClient,
+)
+from src.core.export import build_contact_sheet, save_image, save_style_reference_image
 from src.outline.parser import extract_global_style, parse_markdown
 
 STYLE_BASE_FILENAME: Final[str] = "style_base.png"
@@ -204,7 +209,11 @@ async def _generate_candidate_batch(
     prompts = [
         (prompt, STYLE_SYSTEM_PROMPT, reference_images, None, None) for _ in range(count)
     ]
-    results = await client.generate_images_parallel(prompts, desc="Style references")
+    results = await client.generate_images_parallel(
+        prompts,
+        desc="Style references",
+        image_size=STYLE_IMAGE_SIZE,
+    )
     images: list[bytes] = []
     for index, result in enumerate(results):
         if isinstance(result, Exception):
@@ -335,7 +344,11 @@ async def generate_style_references(
     )
     save_image(base_bytes, candidates_dir / STYLE_BASE_FILENAME)
     base_path = output_dir / STYLE_BASE_FILENAME
-    save_image(base_bytes, base_path)
+    save_style_reference_image(
+        base_bytes,
+        base_path,
+        target_size=STYLE_IMAGE_PIXEL_SIZE,
+    )
 
     content_prompts: list[tuple[StyleRefJob, str]] = []
     for job in content_jobs:
@@ -348,6 +361,7 @@ async def generate_style_references(
             for _, prompt in content_prompts
         ],
         desc="Style references",
+        image_size=STYLE_IMAGE_SIZE,
     )
 
     by_label: dict[str, list[bytes]] = {job.label: [] for job in content_jobs}
@@ -397,7 +411,11 @@ async def generate_style_references(
             )
 
         final_path = output_dir / job.filename
-        save_image(chosen, final_path)
+        save_style_reference_image(
+            chosen,
+            final_path,
+            target_size=STYLE_IMAGE_PIXEL_SIZE,
+        )
         saved.append(final_path)
 
     return saved

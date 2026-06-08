@@ -97,6 +97,8 @@ async def test_generate_style_references_saves_canonical_pngs(tmp_path: Path) ->
     assert (candidates_dir / "style_base_choices.png").exists()
     assert (candidates_dir / "style_cover_choices.png").exists()
     assert client.generate_images_parallel.await_count == 2
+    for call in client.generate_images_parallel.await_args_list:
+        assert call.kwargs.get("image_size") == "1K"
 
 
 @pytest.mark.asyncio
@@ -135,3 +137,5 @@ async def test_generate_style_references_regenerates_base_stage(tmp_path: Path) 
     assert (tmp_path / STYLE_BASE_FILENAME).exists()
     assert base_attempts["count"] == 2
     assert client.generate_images_parallel.await_count == 3
+    for call in client.generate_images_parallel.await_args_list:
+        assert call.kwargs.get("image_size") == "1K"

@@ -46,6 +46,8 @@ DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)"
 # OpenRouter image_config (see https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 SLIDE_ASPECT_RATIO: Final[str] = "16:9"
 SLIDE_IMAGE_SIZE: Final[str] = "2K"
+STYLE_IMAGE_SIZE: Final[str] = "1K"
+STYLE_IMAGE_PIXEL_SIZE: Final[tuple[int, int]] = (1280, 720)
 
 
 class ImagePrompt(NamedTuple):
@@ -322,6 +324,8 @@ class _BaseImageClient:
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
+        *,
+        image_size: str | None = None,
     ) -> bytes:
         raise NotImplementedError
 
@@ -331,6 +335,7 @@ class _BaseImageClient:
         on_result: OnImageResult | None = None,
         *,
         desc: str = "API calls",
+        image_size: str | None = None,
     ) -> list[bytes | Exception]:
         """Generate multiple images in parallel with progress tracking."""
 
@@ -343,6 +348,7 @@ class _BaseImageClient:
                 prompt.system_prompt,
                 prompt.reference_images,
                 context,
+                image_size=image_size,
             )
 
         return await _run_parallel_image_generation(
@@ -534,6 +540,8 @@ class OpenRouterClient(_BaseImageClient):
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
+        *,
+        image_size: str | None = None,
     ) -> bytes:
         """Generate a single image with retry logic."""
 
@@ -549,7 +557,7 @@ class OpenRouterClient(_BaseImageClient):
                     "modalities": ["image", "text"],
                     "image_config": {
                         "aspect_ratio": SLIDE_ASPECT_RATIO,
-                        "image_size": SLIDE_IMAGE_SIZE,
+                        "image_size": image_size or SLIDE_IMAGE_SIZE,
                     },
                 }
                 response = await client.post(
@@ -731,6 +739,8 @@ class VolcengineClient(_BaseImageClient):
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
         assistant_context: str | None = None,
+        *,
+        image_size: str | None = None,
     ) -> bytes:
         @_image_api_retry()
         async def _do_request() -> bytes:
@@ -742,7 +752,7 @@ class VolcengineClient(_BaseImageClient):
                 payload: dict[str, Any] = {
                     "model": self._model,
                     "prompt": merged,
-                    "size": self._image_size,
+                    "size": image_size or self._image_size,
                     "response_format": self._response_format,
                     "sequential_image_generation": "disabled",
                     "watermark": self._watermark,

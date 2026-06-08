@@ -129,6 +129,21 @@ def save_image(image_data: bytes, path: Path) -> None:
     path.write_bytes(image_data)
 
 
+def save_style_reference_image(
+    image_data: bytes,
+    path: Path,
+    *,
+    target_size: tuple[int, int],
+) -> None:
+    """Save a style reference PNG, downscaling to *target_size* when larger."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(io.BytesIO(image_data)) as img:
+        rgb = img.convert("RGB")
+        if rgb.size[0] > target_size[0] or rgb.size[1] > target_size[1]:
+            rgb = rgb.resize(target_size, Image.Resampling.LANCZOS)
+        rgb.save(path, format="PNG")
+
+
 def create_pdf_from_images(image_paths: list[Path], output_path: Path) -> None:
     """Combine multiple saved images into a single PDF.
 
