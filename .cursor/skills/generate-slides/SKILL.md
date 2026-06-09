@@ -108,11 +108,11 @@ To bypass manual CLI prompts but still review style quality, follow this procedu
   python3 -m src.compose.cli --outline work/outline_16.md --style "work/style_*.png" --copy 4
   ```
 
-- This outputs a new timestamped directory, e.g., `work/slides_20260609_164000/`, containing all generated PNG slides and a single compiled `slide_combined.pdf`.
+- This outputs a new timestamped directory, e.g., `work/slides_20260609_164000/`, containing all generated PNG slides and a single compiled `presentation_slides.pdf`.
 
 ### [ ] 5. Quality Assurance & Selective Polishing
 
-- Open the compiled `slide_combined.pdf` (or read individual slide PNGs) to review quality.
+- Open the compiled `presentation_slides.pdf` (or read individual slide PNGs) to review quality.
 - If any individual slide contains layout artifacts, cut-off text, or poor alignment, regenerate that specific slide page. For example, to regenerate slides 3, 5, and 6:
 
   ```bash

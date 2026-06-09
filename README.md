@@ -188,8 +188,8 @@ work/slides_YYYYMMDD_HHMMSS/
 ├── slide_p01_v01.png   # Slide 1, variant 1
 ├── slide_p01_v02.png   # Slide 1, variant 2
 ├── slide_p02_v01.png   # Slide 2, variant 1
-├── slide_combined.pdf  # all slides in one PDF
-└── slide_speech.pdf    # A4: slide image + speech notes
+├── presentation_slides.pdf    # all slides in one PDF
+└── presentation_speech.pdf    # A4: slide image + speech notes
 ```
 
 ## Configuration

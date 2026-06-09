@@ -339,12 +339,12 @@ Render a single polished slide image. The visual composition must tell this slid
     ) -> None:
         if not saved_paths:
             return
-        combined_path = output_dir / "slide_combined.pdf"
+        combined_path = output_dir / "presentation_slides.pdf"
         create_pdf_from_images(saved_paths, combined_path)
         print(f"Created {combined_path.name}")
         if outline is None:
             return
-        speech_path = output_dir / "slide_speech.pdf"
+        speech_path = output_dir / "presentation_speech.pdf"
         create_speech_pdf(saved_paths, slides_by_index_from_outline(outline), speech_path)
         print(f"Created {speech_path.name}")
 

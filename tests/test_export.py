@@ -82,7 +82,7 @@ def test_rebuild_combined_pdf(tmp_path):
 
     pdf_path, count = rebuild_combined_pdf(tmp_path)
     assert count == 2
-    assert pdf_path == tmp_path / "slide_combined.pdf"
+    assert pdf_path == tmp_path / "presentation_slides.pdf"
     assert pdf_path.exists()
 
 
@@ -107,7 +107,7 @@ def test_create_speech_pdf(tmp_path):
     img.save(tmp_path / "slide_p01_v01.png")
     img.save(tmp_path / "slide_p02_v01.png")
 
-    pdf_path = tmp_path / "slide_speech.pdf"
+    pdf_path = tmp_path / "presentation_speech.pdf"
     create_speech_pdf(
         [tmp_path / "slide_p01_v01.png", tmp_path / "slide_p02_v01.png"],
         slides_by_index_from_outline(outline),
@@ -129,7 +129,7 @@ def test_rebuild_speech_pdf(tmp_path):
 
     pdf_path, count = rebuild_speech_pdf(tmp_path, outline)
     assert count == 1
-    assert pdf_path == tmp_path / "slide_speech.pdf"
+    assert pdf_path == tmp_path / "presentation_speech.pdf"
     assert pdf_path.exists()
 
 

@@ -454,9 +454,9 @@ def rebuild_combined_pdf(
     *,
     page_filter: set[int] | None = None,
     variant_filter: set[int] | None = None,
-    pdf_name: str = "slide_combined.pdf",
+    pdf_name: str = "presentation_slides.pdf",
 ) -> tuple[Path, int]:
-    """Rebuild ``slide_combined.pdf`` from existing slide PNGs in *output_dir*."""
+    """Rebuild ``presentation_slides.pdf`` from existing slide PNGs in *output_dir*."""
     image_paths = collect_slide_image_paths(
         output_dir,
         page_filter=page_filter,
@@ -473,9 +473,9 @@ def rebuild_speech_pdf(
     *,
     page_filter: set[int] | None = None,
     variant_filter: set[int] | None = None,
-    pdf_name: str = "slide_speech.pdf",
+    pdf_name: str = "presentation_speech.pdf",
 ) -> tuple[Path, int]:
-    """Rebuild ``slide_speech.pdf`` from slide PNGs and outline speech tags."""
+    """Rebuild ``presentation_speech.pdf`` from slide PNGs and outline speech tags."""
     image_paths = collect_slide_image_paths(
         output_dir,
         page_filter=page_filter,

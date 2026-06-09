@@ -238,7 +238,7 @@ def _run_pdf_only(
 
     if outline is None or not outline.is_file():
         click.echo(
-            "Skipped slide_speech.pdf (outline not found; pass --outline to rebuild speech PDF).",
+            "Skipped presentation_speech.pdf (outline not found; pass --outline to rebuild speech PDF).",
             err=True,
         )
         return
@@ -527,7 +527,7 @@ def _run_generation(
     is_flag=True,
     default=False,
     help=(
-        "Rebuild slide_combined.pdf and slide_speech.pdf from existing slide_p##_v##.png "
+        "Rebuild presentation_slides.pdf and presentation_speech.pdf from existing slide_p##_v##.png "
         "files in --output (no API calls). Speech PDF uses --outline when available."
     ),
 )

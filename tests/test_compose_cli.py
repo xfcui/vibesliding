@@ -241,11 +241,11 @@ def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    assert "slide_combined.pdf" in result.output
-    assert "slide_speech.pdf" in result.output
+    assert "presentation_slides.pdf" in result.output
+    assert "presentation_speech.pdf" in result.output
     assert "2 page" in result.output
-    assert (out / "slide_combined.pdf").exists()
-    assert (out / "slide_speech.pdf").exists()
+    assert (out / "presentation_slides.pdf").exists()
+    assert (out / "presentation_speech.pdf").exists()
 
 
 def test_pdf_only_requires_output(tmp_path: Path) -> None:
