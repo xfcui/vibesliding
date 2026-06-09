@@ -11,6 +11,7 @@ DEFAULT_OUTLINE_PATH = DEFAULT_WORK_DIR / "outline_16.md"
 RESEARCH_FILENAME = "research.md"
 RESEARCH_STATE_FILENAME = "research_state.json"
 IDEA_FILENAME = "idea.md"
+SOURCE_FILENAME = "source.md"
 OUTLINE_FILENAME_PATTERN = "outline_{n}.md"
 OUTPUT_DIR_PREFIX = "slides_"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
@@ -21,7 +22,7 @@ def timestamp_slug() -> str:
 
 
 def default_output_dir() -> Path:
-    return Path(f"./{OUTPUT_DIR_PREFIX}{timestamp_slug()}")
+    return DEFAULT_WORK_DIR / f"{OUTPUT_DIR_PREFIX}{timestamp_slug()}"
 
 
 def outline_path_for_slides(work_dir: Path, slide_count: int) -> Path:

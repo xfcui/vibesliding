@@ -62,25 +62,31 @@ def load_outline_standards(path: Path | None = None) -> str:
     return spec_path.read_text(encoding="utf-8")
 
 
+def _build_source_context(source: str | None) -> str:
+    """Build combined source document block with priority guidance."""
+    if not source:
+        return ""
+    return f"""## Source priority
+When source document, idea, and research conflict, resolve in this order:
+1. **User source document** — primary source of truth for facts, metrics, structure, and examples
+2. **Presentation idea** — high-level direction, audience, scope exclusions
+3. **DeepResearch report** — supporting background and citations
+
+## User source document
+{source.strip()}
+
+"""
+
+
 def build_outline_system_prompt(standards: str) -> str:
     return (
         "You are a presentation designer who turns research into structured PPT outlines "
         "with clear narrative flow.\n\n"
-        "# OUTPUT FORMAT\n"
+        "# RULES\n"
         "- Output ONLY valid markdown — no preamble, no code fences, no commentary.\n"
-        "- Follow the outline standards below EXACTLY for structure, headers, and required tags.\n\n"
-        "# QUALITY RULES\n"
-        "- Every bullet must be self-contained (readable without the slide title) and use the "
-        "**Label:** explanation pattern.\n"
+        "- Follow the outline standards below EXACTLY.\n"
         "- Prefer concrete examples, named tools, and specific numbers over vague abstractions.\n"
-        "- Build narrative momentum: each slide flows naturally from the previous one.\n"
-        "- Visual tags describe composition, layout, focal elements, and narrative — never decorative filler.\n"
-        "- Speech tags expand on bullets with context and transitions — never repeat bullet text verbatim.\n\n"
-        "# APPENDIX BOUNDARY\n"
-        "The Appendix contains ONLY text-describable styles: color palette with hex codes, "
-        "font families with sizes/weights, and optional format constants (aspect ratio, margins). "
-        "Layout, diagram language, icon treatment, and motifs belong exclusively in each slide's "
-        "[Visual:] tag — never duplicated in the Appendix.\n\n"
+        "- Build narrative momentum: each slide flows naturally from the previous one.\n\n"
         f"{standards}"
     )
 
@@ -91,15 +97,18 @@ def build_style_scaffold_prompt(
     report: str,
     *,
     target_slides: list[int],
+    source: str | None = None,
 ) -> str:
     counts = ", ".join(str(n) for n in target_slides)
     num_versions = len(target_slides)
+    source_context = _build_source_context(source)
+
     return f"""Create a SHARED STYLE AND NARRATIVE SCAFFOLD for one presentation deck.
 
 {num_versions} outline version(s) will be generated from this scaffold at **{counts} content slides** each.
 All versions MUST share identical visual style and the same core narrative — longer versions only add slides; they never change the look or rename topics.
 
-## Presentation idea
+{source_context}## Presentation idea
 {idea.strip()}
 
 ## DeepResearch report
@@ -147,6 +156,7 @@ def build_outline_user_prompt(
     report: str,
     *,
     target_slides: int,
+    source: str | None = None,
     style_scaffold: str | None = None,
 ) -> str:
     scaffold_block = ""
@@ -160,10 +170,16 @@ Shorter versions are strict subsets of longer ones: keep CORE spine topics with 
 {style_scaffold.strip()}
 
 """
-    return f"""Turn the research below into a presentation outline.
-{scaffold_block}
+    source_context = _build_source_context(source)
+    opening = (
+        "Turn the source material and research below"
+        if source
+        else "Turn the research below"
+    )
 
-## Presentation idea
+    return f"""{opening} into a presentation outline.
+{scaffold_block}
+{source_context}## Presentation idea
 {idea.strip()}
 
 **Interpretation guidance** — the idea file may contain structured sections. Honor ALL constraints found:
@@ -174,51 +190,17 @@ Shorter versions are strict subsets of longer ones: keep CORE spine topics with 
 - **References**: use listed images/files in appropriate `[Reference:]` and `[Visual:]` tags.
 
 ## Target slide count
-Produce exactly **{target_slides} content slides** — teaching slides with substantive bullets and a clear takeaway.
-
-This count is **only** content slides. It does **not** include:
-- Cover/title slide (always add one)
-- Transition/roadmap/section-divider slides (always add **3-6** of them — see below)
-- Closing/Q&A/thank-you slide (always add one)
-
-Add the cover, closing, and 3-6 transition slides in addition to the {target_slides} content slides.
-
-## Transition slides (MANDATORY: 3-6)
-Segment the deck into 3-6 sections, placing one transition slide before each section so the content never reads as one undifferentiated run.
-- Prefix every transition slide title with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`).
-- Give each transition slide a `[Visual:]` tag that repeats the same roadmap/section-map composition, highlights only the current section, and includes a `progress bar N/total` marker (N = this slide's number, total = total slide count).
-- Keep transition bullets short (2-4 lines) — they orient the audience, they do not teach.
-- Use shorter `[Speech:]` (15-30 s) on transition slides.
+Produce exactly **{target_slides} content slides** (teaching slides with substantive bullets and a clear takeaway).
+This count excludes the cover slide, 3-6 transition/roadmap slides, and closing slide — add those separately.
 
 ## DeepResearch report
 {report.strip()}
 
-## Requirements
-**Structure:**
-- Start with `# PPT Outline: [Title]`
-- Separate the title, every slide, and appendix with `---`
-- Use sequential `## Slide N: [Title]` headers (cover = Slide 1, content starts at Slide 2)
-- Insert 3-6 transition slides (titles prefixed `Roadmap:`) that divide the deck into sections
-- Every slide ends with exactly one `[Visual: ...]` tag and one `[Speech: ...]` tag
-- End with `## Appendix: Global Visual Requirements`
-
-**Content quality:**
-- Each content slide needs an explicit takeaway bullet: `Core insight:`, `Core logic:`, or `Anti-pattern:`
-- Prefer concrete over abstract — name specific tools, cite numbers, reference real examples from the research
+## Reminders (additions beyond the outline standards already in the system prompt)
+- Transition slides: prefix title with `Roadmap:`, include `progress bar N/total` in `[Visual:]`, keep bullets to 2-4 lines, speech to 15-30s
+- Content slides: end each `[Speech:]` with a bridge sentence leading into the next slide
 - If the report references facts or case studies, reflect them accurately in bullets and speech
-
-**Visual tags:**
-- Specify composition (layout pattern, focal object, foreground/background structure), not mood words
-- Style reference images (`style_base.png`, `style_cover.png`, `style_transition.png`, `style_story.png`) are generated alongside the outline; reference them in `[Visual:]` / `[Reference:]` tags where appropriate
-
-**Speech tags:**
-- Conversational tone, 60–90 s delivery per content slide
-- Add context and transitions the bullets don't show; never repeat bullet text verbatim
-- End each speech with a bridge sentence leading into the next slide's topic
-
-**Appendix:**
-- Text-only: Theme (colors + hex), Fonts (families + sizes), optional Format (16:9, margins)
-- Layout, diagrams, icons, and motifs belong in `[Visual:]` tags — never in the Appendix
+- Reference `style_base.png`, `style_cover.png`, `style_transition.png`, `style_story.png` in `[Visual:]` tags where appropriate
 """
 
 
@@ -277,6 +259,7 @@ def _outline_prompts_for_targets(
     idea: str,
     report: str,
     target_slides: list[int],
+    source: str | None = None,
     style_scaffold: str | None = None,
     standards_path: Path | None = None,
 ) -> tuple[str, list[tuple[int, str]]]:
@@ -290,6 +273,7 @@ def _outline_prompts_for_targets(
                 idea,
                 report,
                 target_slides=count,
+                source=source,
                 style_scaffold=style_scaffold,
             ),
         )
@@ -304,6 +288,7 @@ async def write_style_scaffold(
     idea: str,
     report: str,
     target_slides: list[int],
+    source: str | None = None,
     text_model: str | None = None,
     standards_path: Path | None = None,
 ) -> str:
@@ -314,6 +299,7 @@ async def write_style_scaffold(
         idea,
         report,
         target_slides=target_slides,
+        source=source,
     )
     raw = await client.complete_text(
         user_prompt,
@@ -328,6 +314,7 @@ async def write_outline(
     *,
     idea: str,
     report: str,
+    source: str | None = None,
     target_slides: int = 16,
     text_model: str | None = None,
     standards_path: Path | None = None,
@@ -337,6 +324,7 @@ async def write_outline(
         idea=idea,
         report=report,
         target_slides=[target_slides],
+        source=source,
         standards_path=standards_path,
     )
     _, user_prompt = user_prompts[0]
@@ -357,6 +345,7 @@ async def write_outlines_parallel(
     idea: str,
     report: str,
     target_slides: list[int],
+    source: str | None = None,
     text_model: str | None = None,
     standards_path: Path | None = None,
 ) -> tuple[str, list[tuple[int, str, OutlineValidation]]]:
@@ -366,6 +355,7 @@ async def write_outlines_parallel(
         idea=idea,
         report=report,
         target_slides=target_slides,
+        source=source,
         text_model=text_model,
         standards_path=standards_path,
     )
@@ -373,6 +363,7 @@ async def write_outlines_parallel(
         idea=idea,
         report=report,
         target_slides=target_slides,
+        source=source,
         style_scaffold=style_scaffold,
         standards_path=standards_path,
     )

@@ -28,6 +28,7 @@ def test_default_idea_and_outline_paths() -> None:
 
 def test_default_output_dir_prefix() -> None:
     path = default_output_dir()
+    assert path.parent == DEFAULT_WORK_DIR
     assert path.name.startswith(OUTPUT_DIR_PREFIX)
 
 

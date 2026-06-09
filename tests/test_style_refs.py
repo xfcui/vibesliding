@@ -10,7 +10,7 @@ import pytest
 from src.style.refs import (
     STYLE_BASE_FILENAME,
     STYLE_COVER_FILENAME,
-    STYLE_STORY_FILENAME,
+    STYLE_CONTENT_FILENAME,
     STYLE_TRANSITION_FILENAME,
     build_style_ref_jobs,
     extract_presentation_title,
@@ -44,7 +44,7 @@ def test_build_style_ref_jobs_includes_four_plates() -> None:
         STYLE_BASE_FILENAME,
         STYLE_COVER_FILENAME,
         STYLE_TRANSITION_FILENAME,
-        STYLE_STORY_FILENAME,
+        STYLE_CONTENT_FILENAME,
     ]
     assert "AI Native Development" in jobs[1].user_prompt
     assert "NO cover title" in jobs[0].user_prompt or "NO slide-specific layout" in jobs[0].user_prompt
@@ -88,7 +88,7 @@ async def test_generate_style_references_saves_canonical_pngs(tmp_path: Path) ->
         STYLE_BASE_FILENAME,
         STYLE_COVER_FILENAME,
         STYLE_TRANSITION_FILENAME,
-        STYLE_STORY_FILENAME,
+        STYLE_CONTENT_FILENAME,
     ]
     assert all(path.exists() for path in paths)
     assert (tmp_path / STYLE_BASE_FILENAME).exists()

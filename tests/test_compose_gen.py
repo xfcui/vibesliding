@@ -17,12 +17,14 @@ SAMPLE_OUTLINE = """# PPT Outline: Test Deck
 ## Slide 1: Cover
 - **Hook:** Opening point
 [Visual: Bold title slide]
+[Speech: Welcome to the deck.]
 
 ---
 
 ## Slide 2: Content
 - **Point:** Main idea
 [Visual: Diagram focus]
+[Speech: Here is the main idea.]
 
 ---
 
@@ -199,6 +201,7 @@ async def test_generate_first_slide_images_mocked(
     assert len(paths) == 2
     assert all(p.exists() for p in paths)
     assert (out_dir / "slide_combined.pdf").exists()
+    assert (out_dir / "slide_speech.pdf").exists()
 
 
 @pytest.mark.asyncio

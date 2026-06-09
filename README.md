@@ -1,8 +1,6 @@
 # VibeSliding ✨
 
-**Transform ideas into stunning presentations in seconds.** Generate beautiful slide decks from markdown outlines using AI — no design skills required.
-
-Stop wrestling with PowerPoint. Write your content, pick a style, and let AI handle the rest.
+**Transform ideas into stunning presentations in seconds.** Write your content, pick a style, and let AI handle the rest — no design skills required.
 
 ## Why VibeSliding? 🚀
 
@@ -13,16 +11,16 @@ Stop wrestling with PowerPoint. Write your content, pick a style, and let AI han
 
 ## Features
 
-- 🧪 **Valyu DeepResearch** — Turn a one-line idea into a researched, reviewable outline
-- 🎨 **Style Transfer** — One or more reference images for a consistent, on-brand deck
-- 🖼️ **Slide References** — Attach slide-specific photos or image globs directly in the outline
-- 📚 **Outline Articles** — Declare source markdown/PDF references once in the outline
-- 🧠 **Smart Layouts** — AI auto-selects optimal layouts based on your content
+- 🧪 **DeepResearch** — Turn a one-line idea into a researched, reviewable outline via Valyu
+- 🎨 **Style Transfer** — Reference images for a consistent, on-brand deck
+- 🖼️ **Slide References** — Attach slide-specific photos or image globs in the outline
+- 📚 **Outline Articles** — Declare source markdown/PDF references once at the top
+- 🧠 **Smart Layouts** — AI auto-selects optimal layouts based on content
 - 🔄 **Multiple Variants** — Generate several design options per slide
 - 🎯 **Selective Regeneration** — Redo specific slides without starting over
-- ⚡ **Blazing Fast** — Parallel generation with configurable concurrency
-- 📄 **Auto PDF** — All slides combined into one file
-- 🔌 **Multiple Providers** — OpenRouter (outline + images) and Volcengine/Doubao Seedream (images)
+- ⚡ **Parallel Generation** — Concurrent API calls with configurable concurrency
+- 📄 **Auto PDF** — Combined slide PDF + speech-notes PDF
+- 🔌 **Multi-Provider** — OpenRouter (text + images) and Volcengine/Doubao Seedream (images)
 
 ## Quick Start
 
@@ -31,77 +29,66 @@ pip install -r requirements.txt
 cp .env.example .env   # add your API keys
 ```
 
-## How It Works
+## Pipeline
 
-Four steps — **research**, **outline**, **style**, **compose**:
+Four steps — **research → outline → style → compose**:
 
 ```bash
-# 1. DeepResearch from work/idea.md → work/research.md
+# 1. DeepResearch: idea.md → research.md
 python3 -m src.research.cli
 
-# 2. Generate outlines (16/25/36 content slides) → work/outline_*.md
+# 2. Outline: research.md → outline_16.md, outline_25.md, outline_36.md
 python3 -m src.outline.cli
 
-# 3. Generate style references (interactive picker) → work/style_*.png
+# 3. Style: interactive reference picker → style_*.png
 python3 -m src.style.cli
 
-# 4. Compose slide images → slides_YYYYMMDD_HHMMSS/
+# 4. Compose: outline + style → slide images + PDF
 python3 -m src.compose.cli
 ```
 
 Then **curate** (delete variants you don't love) and **polish** (`--page` to regenerate individual slides).
 
-> 💡 **Pro tip:** Steps 1–3 share `./work/` — edit files between steps. Compose reads `work/` and writes a fresh timestamped output folder.
+> 💡 Steps 1–3 share `./work/` — edit files between steps. Compose writes output to `work/slides_YYYYMMDD_HHMMSS/`.
 
-## Usage
-
-### Style
+## Usage Examples
 
 ```bash
-# Pick a different outline length
+# Style: pick a different outline, or skip interactive prompts
 python3 -m src.style.cli --outline work/outline_25.md
-
-# Non-interactive: pre-select base,cover,transition,story indices
 python3 -m src.style.cli --pick 1,2,1,3
-```
 
-### Compose
-
-```bash
-# Generate multiple variants per slide
+# Compose: multiple variants per slide
 python3 -m src.compose.cli --copy 4
 
-# Use a longer outline
-python3 -m src.compose.cli --outline work/outline_36.md
+# Compose: longer outline + selective regeneration
+python3 -m src.compose.cli --outline work/outline_36.md --page "1,3,5-7"
 
-# Regenerate specific slides
-python3 -m src.compose.cli --page "1,3,5-7"
+# Compose: rebuild PDF after curating (no API calls)
+python3 -m src.compose.cli --pdf-only --output work/slides_20260520_220006
+python3 -m src.compose.cli --pdf-only --output work/slides_20260520_220006 --variant 1
 
-# Rebuild PDF after curating variants (no API calls)
-python3 -m src.compose.cli --pdf-only --output slides_20260520_220006
-python3 -m src.compose.cli --pdf-only --output slides_20260520_220006 --variant 1
-
-# Explicit style files plus articles
+# Compose: explicit style files + article references
 python3 -m src.compose.cli --style cover.png --style body.png --article "docs/*.pdf"
 ```
 
-## CLI Options
+## CLI Reference
 
-### `python3 -m src.research.cli`
+### `src.research.cli`
 
 | Option | Description |
 |--------|-------------|
 | `--work` | Work directory (default: `work/`) |
 | `--mode` | Valyu mode: `fast` / `standard` / `heavy` / `max` |
-| `--categories` | Comma-separated Valyu datasource categories (see below) |
+| `--categories` | Comma-separated datasource categories (see below) |
 | `--valyu-api-key` | Valyu API key override |
-| `--resume` | Resume polling an in-progress task from `research_state.json` |
-| `--task-id` | Resume a specific Valyu task ID (optional with `--resume`) |
-| `--fresh` | Start a new task even if a resume state file exists |
+| `--resume` | Resume polling from `research_state.json` |
+| `--task-id` | Resume a specific task ID |
+| `--fresh` | Start new task even if state file exists |
 
-Valid `--categories` values: `research`, `healthcare`, `patents`, `markets`, `company`, `economic`, `predictions`, `legal`, `politics`, `cybersecurity`, `transportation`
+Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic`, `predictions`, `legal`, `politics`, `cybersecurity`, `transportation`
 
-### `python3 -m src.outline.cli`
+### `src.outline.cli`
 
 | Option | Description |
 |--------|-------------|
@@ -111,61 +98,60 @@ Valid `--categories` values: `research`, `healthcare`, `patents`, `markets`, `co
 | `--txt-model` | Text model override |
 | `--proxy` | HTTP/HTTPS proxy for OpenRouter |
 
-### `python3 -m src.style.cli`
+### `src.style.cli`
 
 | Option | Description |
 |--------|-------------|
 | `--work` | Work directory (default: `work/`) |
 | `--outline` | Outline file (default: `work/outline_16.md`) |
 | `--candidates` | Candidates per stage (default: 4, max: 12) |
-| `--pick` | Pre-select indices: `base,cover,transition,story` |
+| `--pick` | Pre-select indices: `base,cover,transition,content` |
 | `--provider` | `openrouter` or `volcengine` |
 | `--api-key` | API key override |
 | `--proxy` | HTTP/HTTPS proxy (OpenRouter only) |
 
-### `python3 -m src.compose.cli`
+### `src.compose.cli`
 
 | Option | Description |
 |--------|-------------|
 | `--work` | Work directory (default: `work/`) |
 | `--outline` | Outline file (default: `work/outline_16.md`) |
-| `--style` | Style image(s)/glob (default: `work/style_*.png`) |
+| `--style` | Style image(s)/glob, repeatable (default: `work/style_*.png`) |
 | `--copy` | Variants per slide (default: 1) |
 | `--page` | Pages to generate, e.g. `1,3,5-7` |
-| `--article` | Reference docs/globs, e.g. `"docs/*.pdf"` |
-| `--output` | Output dir (default: `slides_YYYYMMDD_HHMMSS/`) |
+| `--article` | Article path(s)/glob, repeatable (`.pdf`, `.md`) |
+| `--output` | Output dir (default: `work/slides_YYYYMMDD_HHMMSS/`) |
 | `--provider` | `openrouter` or `volcengine` |
 | `--api-key` | API key override |
 | `--proxy` | HTTP/HTTPS proxy (OpenRouter only) |
 | `--balance-only` | Print OpenRouter credits and exit |
-| `--no-balance` | Skip credits line after a run |
-| `--pdf-only` | Rebuild PDF from existing PNGs (no API) |
+| `--no-balance` | Skip credits line after run |
+| `--pdf-only` | Rebuild PDF from existing PNGs (requires `--output`) |
 | `--variant` | With `--pdf-only`: variant filter, e.g. `1` or `1,2` |
 
-> **Credits:** After each OpenRouter run, remaining credits are printed unless `--no-balance` is passed. Requires an OpenRouter **Management API key** — set `OPENROUTER_MANAGEMENT_API_KEY` or `[openrouter] management_api_key` ([create one here](https://openrouter.ai/settings/management-keys)). Volcengine runs skip this.
+> **Credits:** After each OpenRouter run, remaining credits are printed unless `--no-balance`. Requires an OpenRouter [Management API key](https://openrouter.ai/settings/management-keys) — set `OPENROUTER_MANAGEMENT_API_KEY` or `[openrouter] management_api_key` in `.env`.
 
 ## Input/Output
 
-### Work Directory (`work/`)
+### Work Directory
 
 ```
 work/
-├── idea.md                # presentation seed (title, audience, core message)
-├── research.md            # Valyu DeepResearch report (with inline citations)
-├── style_base.md          # shared style + narrative scaffold
-├── outline_16.md          # 16 content-slide outline
-├── outline_25.md          # 25 content-slide outline
-├── outline_36.md          # 36 content-slide outline
-├── style_base.png         # chosen base plate (palette + typography)
-├── style_cover.png        # chosen cover-slide reference
-├── style_transition.png   # chosen transition/roadmap reference
-├── style_story.png        # chosen content/story-slide reference
-└── style_candidates/      # all candidates + numbered contact sheets
+├── idea.md              # seed: title, audience, core message
+├── research.md          # DeepResearch report with citations
+├── source.md            # optional custom source material
+├── style_base.md        # shared style + narrative scaffold
+├── outline_16.md        # 16 content-slide outline
+├── outline_25.md        # 25 content-slide outline
+├── outline_36.md        # 36 content-slide outline
+├── style_base.png       # base plate (palette + typography)
+├── style_cover.png      # cover-slide reference
+├── style_transition.png # transition/roadmap reference
+├── style_content.png    # content-slide reference
+└── style_candidates/    # all candidates + contact sheets
 ```
 
 ### Outline Format
-
-Each `## Slide N: Title` heading becomes a slide. See `examples/outline.md` for a full sample.
 
 ```markdown
 # My Presentation
@@ -186,42 +172,45 @@ Each `## Slide N: Title` heading becomes a slide. See `examples/outline.md` for 
 - **Colors:** Primary: #2563EB, Accent: #10B981
 ```
 
-- `[Visual: ...]` — layout, composition, diagrams, icons, motifs
-- `[Reference: ...]` — slide-specific image refs (leading `@` accepted)
-- `[Articles: ...]` — attach text references at the top of the outline
-- Include **3-6 transition slides** (titles prefixed `Roadmap:`) with `progress bar N/total` markers
-- `## Appendix: Global Visual Requirements` — text styles only (colors + hex, fonts + sizes)
+| Tag | Purpose |
+|-----|---------|
+| `[Visual: ...]` | Layout, composition, diagrams, icons, motifs |
+| `[Reference: ...]` | Slide-specific image refs (leading `@` accepted) |
+| `[Articles: ...]` | Top-of-outline text reference declarations |
+| `## Appendix: ...` | Deck-wide text styles (colors + hex, fonts + sizes) |
+
+Include **3–6 transition slides** (titles prefixed `Roadmap:`) with `progress bar N/total` markers.
 
 ### Compose Output
 
 ```
-slides_YYYYMMDD_HHMMSS/
-├── slide_p01_v01.png     # Slide 1, variant 1
-├── slide_p01_v02.png     # Slide 1, variant 2
-├── slide_p02_v01.png     # Slide 2, variant 1
-└── slide_combined.pdf    # all slides in one PDF
+work/slides_YYYYMMDD_HHMMSS/
+├── slide_p01_v01.png   # Slide 1, variant 1
+├── slide_p01_v02.png   # Slide 1, variant 2
+├── slide_p02_v01.png   # Slide 2, variant 1
+├── slide_combined.pdf  # all slides in one PDF
+└── slide_speech.pdf    # A4: slide image + speech notes
 ```
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in your keys. The file uses INI-style sections:
+Copy `.env.example` → `.env` and fill in your keys. INI-style sections:
 
 | Section | Used by | Key settings |
 |---------|---------|-------------|
-| *(preamble)* | All steps | `provider`, `max_concurrent`, `proxy`, `ark_api_key` |
+| *(preamble)* | All | `provider`, `max_concurrent`, `proxy` |
 | `[valyu]` | Research | `api_key`, `mode`, `categories`, `use_proxy`, `proxy` |
-| `[openrouter]` | Outline / Style / Compose | `api_key`, `management_api_key`, `img_model`, `txt_model`, `max_concurrent`, `use_proxy`, `proxy` |
+| `[openrouter]` | Outline / Style / Compose | `api_key`, `management_api_key`, `img_model`, `txt_model`, `use_proxy`, `proxy` |
 | `[volcengine]` | Style / Compose | `api_key`, `img_model`, `txt_model`, `base_url`, `image_size`, `response_format`, `watermark`, `use_proxy`, `proxy` |
 
-- **Research** uses `[valyu]` for DeepResearch
-- **Outline** uses `txt_model` from `[openrouter]` only (text generation)
-- **Style** and **Compose** use `img_model` from the active `provider`
-- `ark_api_key` in the preamble is an alias for `[volcengine] api_key`
-- Each step is independent — configure each backend separately
+- **Research** → `[valyu]` for DeepResearch
+- **Outline** → `txt_model` from `[openrouter]` (text only)
+- **Style / Compose** → `img_model` from the active `provider`
+- `ark_api_key` in the preamble aliases `[volcengine] api_key`
 
 ## Examples
 
-Check out the `examples/` folder for sample outlines and style references to get started quickly!
+See `examples/` for sample outlines and style references.
 
 ## License
 

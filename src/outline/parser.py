@@ -14,6 +14,10 @@ STYLE_KEYWORDS: Final[tuple[str, ...]] = (
     "visual style",
     "design standards",
 )
+SPEECH_TAG_PATTERN: Final[re.Pattern] = re.compile(
+    r"\[Speech\s*:\s*(.*?)\]",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 @dataclass
@@ -70,3 +74,11 @@ def extract_global_style(slides: list[Slide]) -> str | None:
         if any(keyword in title_lower for keyword in STYLE_KEYWORDS):
             return slide.content
     return None
+
+
+def extract_speech_text(content: str) -> str | None:
+    """Return presenter speech from a slide's ``[Speech:]`` tag, if present."""
+    match = SPEECH_TAG_PATTERN.search(content)
+    if not match:
+        return None
+    return match.group(1).strip()

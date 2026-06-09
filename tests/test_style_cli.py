@@ -40,7 +40,7 @@ def test_style_cli_generates_references_and_prints_compose_command(
         work_dir / "style_base.png",
         work_dir / "style_cover.png",
         work_dir / "style_transition.png",
-        work_dir / "style_story.png",
+        work_dir / "style_content.png",
     ]
 
     with (
@@ -90,7 +90,7 @@ def test_parse_pick_spec() -> None:
         "base": 2,
         "cover": 1,
         "transition": 3,
-        "story": 4,
+        "content": 4,
     }
 
 
@@ -118,7 +118,7 @@ def test_parse_pick_spec_invalid_count() -> None:
 
 
 def test_build_style_selector_with_picks(tmp_path: Path) -> None:
-    picks = {"base": 2, "cover": 1, "transition": 3, "story": 4}
+    picks = {"base": 2, "cover": 1, "transition": 3, "content": 4}
     selector = build_style_selector(candidates=4, picks=picks)
     choices = tmp_path / "style_base_choices.png"
     choices.write_bytes(b"x")
@@ -126,7 +126,7 @@ def test_build_style_selector_with_picks(tmp_path: Path) -> None:
     assert selector("base", choices, 4) == 2
     assert selector("cover", choices, 4) == 1
     assert selector("transition", choices, 4) == 3
-    assert selector("story", choices, 4) == 4
+    assert selector("content", choices, 4) == 4
 
 
 def test_build_style_selector_non_tty_defaults_to_first(tmp_path: Path, monkeypatch) -> None:

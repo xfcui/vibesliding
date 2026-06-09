@@ -1,6 +1,6 @@
 """Outline pipeline: research -> presentation outline markdown."""
 
-from src.outline.parser import Slide, extract_global_style, parse_markdown
+from src.outline.parser import Slide, extract_global_style, extract_speech_text, parse_markdown
 from src.outline.writer import (
     OutlineValidation,
     write_outline,
@@ -11,6 +11,7 @@ from src.outline.writer import (
 __all__ = [
     "Slide",
     "extract_global_style",
+    "extract_speech_text",
     "parse_markdown",
     "OutlineValidation",
     "write_outline",

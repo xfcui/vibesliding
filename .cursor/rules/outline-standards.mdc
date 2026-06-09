@@ -9,7 +9,7 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 
 ## Core Principles
 
-- **Visual carries the story:** The composition communicates each slide's narrative, sequence, contrast, or transformation before any text is read.
+- **Visual carries the content:** The composition communicates each slide's narrative, sequence, contrast, or transformation before any text is read.
 - **Text earns its place:** Bullets act as labels, anchors, and reasoning the visual cannot show; cut anything the visual already conveys.
 - **One slide, one idea:** Resolve every slide to a single explicit takeaway, not a collection of loosely related facts.
 - **Built for live presentation:** Design for an audience scanning in seconds while the speaker talks, not for a reader studying a document.
@@ -62,7 +62,7 @@ Every deck MUST include **3-6 transition slides** that divide the content into c
 
 - Write self-contained bullets that make sense without relying on the slide title.
 - Prefer `**Label:** explanation` bullets that explain why the point matters, not just what it is.
-- Keep text supportive and compact so the slide is not forced to tell the whole story through bullets.
+- Keep text supportive and compact so the slide is not forced to tell the whole content through bullets.
 - Use summary bullets to make the takeaway explicit: `Core insight:`, `Core logic:`, or `Anti-pattern:`.
 - Use tables for taxonomies or comparisons, and sub-bullets only for workflows such as `Plan -> Implement -> Test`.
 
@@ -78,7 +78,7 @@ Every deck MUST include **3-6 transition slides** that divide the content into c
 
 ## Visual Tags
 
-Write `[Visual:]` prompts as production-ready art direction that tells the slide's story faster than decoration or text alone.
+Write `[Visual:]` prompts as production-ready art direction that tells the slide's content faster than decoration or text alone.
 
 - **Visual style ownership:** `[Visual:]` owns layout, composition, diagram language, icon treatment, recurring motifs, and animation intent. Do NOT restate these in the appendix — define them here per slide (or inherit from style reference images).
 - Specify the focal object, foreground/background structure, and layout pattern: split-screen, grid, pipeline, roadmap, or system diagram.

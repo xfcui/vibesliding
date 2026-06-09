@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Final
 
 from src.core.api_client import ImagePrompt, OpenRouterClient, VolcengineClient
-from src.core.export import create_pdf_from_images, save_image
+from src.core.export import (
+    create_pdf_from_images,
+    create_speech_pdf,
+    save_image,
+    slides_by_index_from_outline,
+)
 from src.core.resolve import PathResolveError, resolve_patterns
 from src.outline.parser import Slide, extract_global_style, parse_markdown
 
@@ -296,7 +301,7 @@ If a `[Visual: ...]` instruction exists for this slide, treat it as the **author
 {clean_content}
 {visual_instruction}
 {reference_summary}
-Render a single polished slide image. The visual composition must tell this slide's story at a glance; on-slide text supports and labels, it does not duplicate the visual.
+Render a single polished slide image. The visual composition must tell this slide's content at a glance; on-slide text supports and labels, it does not duplicate the visual.
 """
 
         return user_prompt, system_prompt
@@ -327,12 +332,22 @@ Render a single polished slide image. The visual composition must tell this slid
         return path
 
     @staticmethod
-    def _create_combined_pdf(saved_paths: list[Path], output_dir: Path) -> None:
+    def _create_output_pdfs(
+        saved_paths: list[Path],
+        output_dir: Path,
+        *,
+        outline: str | None = None,
+    ) -> None:
         if not saved_paths:
             return
-        pdf_path = output_dir / "slide_combined.pdf"
-        create_pdf_from_images(saved_paths, pdf_path)
-        print(f"Created {pdf_path.name}")
+        combined_path = output_dir / "slide_combined.pdf"
+        create_pdf_from_images(saved_paths, combined_path)
+        print(f"Created {combined_path.name}")
+        if outline is None:
+            return
+        speech_path = output_dir / "slide_speech.pdf"
+        create_speech_pdf(saved_paths, slides_by_index_from_outline(outline), speech_path)
+        print(f"Created {speech_path.name}")
 
     def _make_image_save_callback(
         self,
@@ -402,6 +417,7 @@ Render a single polished slide image. The visual composition must tell this slid
         output_dir: Path,
         *,
         expected: int,
+        outline: str | None = None,
     ) -> tuple[list[Path | None], list[Path]]:
         saved_slots: list[Path | None] = [None] * len(paths)
         results = await self.client.generate_images_parallel(
@@ -411,7 +427,7 @@ Render a single polished slide image. The visual composition must tell this slid
         )
         self._report_results(results, expected)
         saved_paths = self._ordered_saved_paths(saved_slots)
-        self._create_combined_pdf(saved_paths, output_dir)
+        self._create_output_pdfs(saved_paths, output_dir, outline=outline)
         return saved_slots, saved_paths
 
     async def generate_first_slide_images(
@@ -465,6 +481,7 @@ Render a single polished slide image. The visual composition must tell this slid
             paths,
             out_dir,
             expected=copy,
+            outline=outline,
         )
         return saved_paths
 
@@ -544,6 +561,7 @@ Render a single polished slide image. The visual composition must tell this slid
             paths,
             out_dir,
             expected=total,
+            outline=outline,
         )
 
         slide_paths: dict[int, list[Path]] = {}

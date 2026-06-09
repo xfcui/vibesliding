@@ -14,6 +14,7 @@ from src.core.paths import (
     DEFAULT_WORK_DIR,
     IDEA_FILENAME,
     RESEARCH_FILENAME,
+    SOURCE_FILENAME,
     outline_path_for_slides,
     read_nonempty_text,
 )
@@ -90,10 +91,17 @@ def main(
 
     research_path = work_dir / RESEARCH_FILENAME
     idea_path = work_dir / IDEA_FILENAME
+    source_path = work_dir / SOURCE_FILENAME
 
+    source = None
     try:
         idea = read_nonempty_text(idea_path, label="Idea file")
         report = read_nonempty_text(research_path, label="Research file")
+        if source_path.is_file():
+            try:
+                source = read_nonempty_text(source_path, label="Source file")
+            except ValueError as exc:
+                click.echo(f"Warning: {exc}", err=True)
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
 
@@ -105,6 +113,8 @@ def main(
     config.validate_outline()
 
     click.echo(f"Work dir: {work_dir.resolve()}")
+    if source:
+        click.echo(f"Source: {source_path.resolve()}")
     click.echo(f"Research: {research_path.resolve()}")
     click.echo(f"Target content slides: {slide_counts} (excluding cover, transition, ending)")
     click.echo(f"Text model: {config.txt_model}")
@@ -122,6 +132,7 @@ def main(
             client,
             idea=idea,
             report=report,
+            source=source,
             target_slides=slide_counts,
             text_model=config.txt_model,
         )

@@ -20,7 +20,7 @@ from src.outline.parser import extract_global_style, parse_markdown
 STYLE_BASE_FILENAME: Final[str] = "style_base.png"
 STYLE_COVER_FILENAME: Final[str] = "style_cover.png"
 STYLE_TRANSITION_FILENAME: Final[str] = "style_transition.png"
-STYLE_STORY_FILENAME: Final[str] = "style_story.png"
+STYLE_CONTENT_FILENAME: Final[str] = "style_content.png"
 STYLE_CANDIDATES_DIRNAME: Final[str] = "style_candidates"
 
 # StyleSelectFn returns 1..count to pick a candidate, or 0 to regenerate the stage.
@@ -91,7 +91,7 @@ def build_style_ref_jobs(
     outline: str,
     presentation_title: str | None = None,
 ) -> list[StyleRefJob]:
-    """Build prompts for base, cover, transition, and story style-reference slides."""
+    """Build prompts for base, cover, transition, and content style-reference slides."""
     title = presentation_title or extract_presentation_title(outline, fallback=idea)
     visual_requirements = _visual_requirements_block(outline)
 
@@ -158,7 +158,7 @@ Generate a section-divider and roadmap reference plate on a single 1920×1080 ca
 - NO long sentences, NO dense text, NO background artwork competing with the roadmap chips.
 """
 
-    story_prompt = f"""CREATE STYLE REFERENCE: CONTENT / TEACHING SLIDE
+    content_prompt = f"""CREATE STYLE REFERENCE: CONTENT / TEACHING SLIDE
 Presentation: "{title}"
 {visual_requirements}
 Generate a content-slide reference plate on a single 1920×1080 canvas. This plate defines the visual system and split-screen layout for all content, teaching, and diagram slides in the deck.
@@ -189,7 +189,7 @@ Generate a content-slide reference plate on a single 1920×1080 canvas. This pla
             transition_prompt,
             use_base_reference=True,
         ),
-        StyleRefJob(STYLE_STORY_FILENAME, "story", story_prompt, use_base_reference=True),
+        StyleRefJob(STYLE_CONTENT_FILENAME, "content", content_prompt, use_base_reference=True),
     ]
 
 
@@ -313,13 +313,13 @@ async def generate_style_references(
     candidates: int = 4,
     select: StyleSelectFn | None = None,
 ) -> list[Path]:
-    """Generate base, cover, transition, and story style-reference PNGs in *output_dir*.
+    """Generate base, cover, transition, and content style-reference PNGs in *output_dir*.
 
     Stage 1 generates *candidates* blank base plates; the user picks one (or regenerates).
-    Stage 2 generates *candidates* each for cover, transition, and story using the
+    Stage 2 generates *candidates* each for cover, transition, and content using the
     chosen base as reference; the user picks one per type (or regenerates that stage).
 
-    Returns the four canonical style reference paths (base, cover, transition, story).
+    Returns the four canonical style reference paths (base, cover, transition, content).
     """
     if candidates < 1:
         raise ValueError("candidates must be >= 1")

@@ -1,9 +1,9 @@
-"""Style reference generation: outline → cover/transition/story PNGs."""
+"""Style reference generation: outline → cover/transition/content PNGs."""
 
 from src.style.refs import (
     STYLE_BASE_FILENAME,
+    STYLE_CONTENT_FILENAME,
     STYLE_COVER_FILENAME,
-    STYLE_STORY_FILENAME,
     STYLE_TRANSITION_FILENAME,
     StyleRefJob,
     StyleSelectFn,
@@ -14,8 +14,8 @@ from src.style.refs import (
 
 __all__ = [
     "STYLE_BASE_FILENAME",
+    "STYLE_CONTENT_FILENAME",
     "STYLE_COVER_FILENAME",
-    "STYLE_STORY_FILENAME",
     "STYLE_TRANSITION_FILENAME",
     "StyleRefJob",
     "StyleSelectFn",

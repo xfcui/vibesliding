@@ -16,15 +16,15 @@ from src.style.refs import StyleSelectFn, generate_style_references
 
 load_dotenv()
 
-STAGE_ORDER = ("base", "cover", "transition", "story")
+STAGE_ORDER = ("base", "cover", "transition", "content")
 
 
 def parse_pick_spec(spec: str, *, candidates: int) -> dict[str, int]:
-    """Parse ``base,cover,transition,story`` indices (1-based)."""
+    """Parse ``base,cover,transition,content`` indices (1-based)."""
     parts = [part.strip() for part in spec.split(",")]
     if len(parts) != len(STAGE_ORDER):
         raise click.UsageError(
-            "--pick requires four comma-separated indices: base,cover,transition,story "
+            "--pick requires four comma-separated indices: base,cover,transition,content "
             f"(got {len(parts)})"
         )
 
@@ -137,7 +137,7 @@ def build_style_selector(
     default=None,
     help=(
         "Skip prompts and use pre-selected indices: "
-        "base,cover,transition,story (e.g. 1,2,1,3)."
+        "base,cover,transition,content (e.g. 1,2,1,3)."
     ),
 )
 @click.option(
@@ -190,7 +190,7 @@ def main(
     click.echo(f"Provider: {provider_label(image_client)}")
     click.echo(
         f"Generating style references ({candidates} candidates per stage: "
-        "base, then cover/transition/story)..."
+        "base, then cover/transition/content)..."
     )
 
     async def _generate_styles() -> list[Path]:

@@ -9,7 +9,9 @@ import pytest
 
 from src.core.api_client import OpenRouterClient
 from src.outline.writer import (
+    _build_source_context,
     build_outline_user_prompt,
+    build_style_scaffold_prompt,
     count_transition_slides,
     load_outline_standards,
     strip_code_fences,
@@ -112,6 +114,18 @@ class TestStripCodeFences:
         assert strip_code_fences(text).startswith("# PPT Outline:")
 
 
+class TestBuildSourceContext:
+    def test_returns_empty_when_no_source(self) -> None:
+        assert _build_source_context(None) == ""
+        assert _build_source_context("") == ""
+
+    def test_includes_priority_and_content(self) -> None:
+        ctx = _build_source_context("My source doc")
+        assert "Source priority" in ctx
+        assert "My source doc" in ctx
+        assert "primary source of truth" in ctx
+
+
 class TestBuildPrompt:
     def test_includes_idea_and_slide_count(self) -> None:
         prompt = build_outline_user_prompt(
@@ -122,8 +136,29 @@ class TestBuildPrompt:
         assert "My idea" in prompt
         assert "8" in prompt
         assert "content slides" in prompt
-        assert "does **not** include" in prompt
+        assert "excludes the cover slide" in prompt
         assert "Report text" in prompt
+
+    def test_opening_adapts_to_source_presence(self) -> None:
+        without = build_outline_user_prompt("idea", "report", target_slides=8)
+        assert without.startswith("Turn the research below")
+
+        with_src = build_outline_user_prompt(
+            "idea", "report", target_slides=8, source="src"
+        )
+        assert with_src.startswith("Turn the source material")
+
+    def test_includes_source_and_priority_when_provided(self) -> None:
+        prompt = build_outline_user_prompt(
+            "My idea",
+            "Report text",
+            target_slides=8,
+            source="Primary user source doc contents",
+        )
+        assert "My idea" in prompt
+        assert "Report text" in prompt
+        assert "Primary user source doc contents" in prompt
+        assert "Source priority" in prompt
 
 
 @pytest.mark.asyncio
@@ -172,6 +207,18 @@ class TestSharedStylePrompt:
         assert "SHARED STYLE SCAFFOLD" in prompt
         assert "Navy #0a1628" in prompt
         assert "verbatim" in prompt
+
+    def test_scaffold_prompt_includes_source_when_provided(self) -> None:
+        prompt = build_style_scaffold_prompt(
+            "idea",
+            "report",
+            target_slides=[16],
+            source="Primary user source doc contents",
+        )
+        assert "idea" in prompt
+        assert "report" in prompt
+        assert "Primary user source doc contents" in prompt
+        assert "Source priority" in prompt
 
 
 @pytest.mark.asyncio

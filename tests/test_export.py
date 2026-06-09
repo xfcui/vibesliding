@@ -7,9 +7,12 @@ from src.core.export import (
     build_contact_sheet,
     collect_slide_image_paths,
     create_pdf_from_images,
+    create_speech_pdf,
     rebuild_combined_pdf,
+    rebuild_speech_pdf,
     save_image,
     save_style_reference_image,
+    slides_by_index_from_outline,
 )
 
 
@@ -80,6 +83,53 @@ def test_rebuild_combined_pdf(tmp_path):
     pdf_path, count = rebuild_combined_pdf(tmp_path)
     assert count == 2
     assert pdf_path == tmp_path / "slide_combined.pdf"
+    assert pdf_path.exists()
+
+
+def test_create_speech_pdf(tmp_path):
+    outline = """# Deck
+
+---
+
+## Slide 1: Cover
+- Hook
+[Visual: title]
+[Speech: Welcome everyone to this talk.]
+
+---
+
+## Slide 2: Body
+- Point
+[Visual: diagram]
+[Speech: The key insight is simple.]
+"""
+    img = Image.new("RGB", (320, 180), color="red")
+    img.save(tmp_path / "slide_p01_v01.png")
+    img.save(tmp_path / "slide_p02_v01.png")
+
+    pdf_path = tmp_path / "slide_speech.pdf"
+    create_speech_pdf(
+        [tmp_path / "slide_p01_v01.png", tmp_path / "slide_p02_v01.png"],
+        slides_by_index_from_outline(outline),
+        pdf_path,
+    )
+
+    assert pdf_path.exists()
+
+
+def test_rebuild_speech_pdf(tmp_path):
+    outline = """# Deck
+
+---
+
+## Slide 1: Cover
+[Speech: Hello.]
+"""
+    Image.new("RGB", (80, 45), color="green").save(tmp_path / "slide_p01_v01.png")
+
+    pdf_path, count = rebuild_speech_pdf(tmp_path, outline)
+    assert count == 1
+    assert pdf_path == tmp_path / "slide_speech.pdf"
     assert pdf_path.exists()
 
 

@@ -210,15 +210,42 @@ def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
     for name in ("slide_p01_v01.png", "slide_p01_v02.png", "slide_p02_v01.png"):
         Image.new("RGB", (40, 40), color="green").save(out / name)
 
+    outline = tmp_path / "outline.md"
+    outline.write_text(
+        """# Deck
+
+---
+
+## Slide 1: Cover
+[Speech: Hello slide one.]
+
+---
+
+## Slide 2: Body
+[Speech: Hello slide two.]
+""",
+        encoding="utf-8",
+    )
+
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["--pdf-only", "--output", str(out), "--variant", "1"],
+        [
+            "--pdf-only",
+            "--output",
+            str(out),
+            "--variant",
+            "1",
+            "--outline",
+            str(outline),
+        ],
     )
     assert result.exit_code == 0, result.output
     assert "slide_combined.pdf" in result.output
+    assert "slide_speech.pdf" in result.output
     assert "2 page" in result.output
     assert (out / "slide_combined.pdf").exists()
+    assert (out / "slide_speech.pdf").exists()
 
 
 def test_pdf_only_requires_output(tmp_path: Path) -> None:
