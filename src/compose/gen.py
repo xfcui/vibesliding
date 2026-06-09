@@ -328,7 +328,6 @@ Render a single polished slide image. The visual composition must tell this slid
         if isinstance(result, Exception):
             return None
         save_image(result, path)
-        print(f"Saved {path.name}")
         return path
 
     @staticmethod
