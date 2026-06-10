@@ -14,6 +14,13 @@ from src.core.export import (
     save_image,
     slides_by_index_from_outline,
 )
+from src.core.paths import (
+    DEFAULT_WORK_DIR,
+    presentation_slides_pdf_path,
+    presentation_speech_pdf_path,
+    timestamp_from_image_dir,
+    timestamp_slug,
+)
 from src.core.resolve import PathResolveError, resolve_patterns
 from src.outline.parser import Slide, extract_global_style, parse_markdown
 
@@ -26,7 +33,7 @@ REFERENCE_TAG_PATTERN: Final[re.Pattern] = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 SPEECH_TAG_PATTERN: Final[re.Pattern] = re.compile(
-    r"\[Speech\s*:.*?\]", re.IGNORECASE | re.DOTALL,
+    r"\[Speech\s*:\s*(.*?)\]", re.IGNORECASE | re.DOTALL,
 )
 SUPPORTED_REFERENCE_EXTENSIONS: Final[frozenset[str]] = frozenset(
     {".png", ".jpg", ".jpeg"}
@@ -151,14 +158,38 @@ class SlideImageGenerator:
         """Build user and system prompts for current slide."""
         slide_reference_paths = slide_reference_paths or []
         visual_tag = ""
-        visual_match = re.search(r"\[Visual:\s*(.*?)\]", slide.content, re.IGNORECASE)
-        if visual_match:
-            visual_tag = visual_match.group(1).strip()
-            clean_content = slide.content.replace(visual_match.group(0), "").strip()
+        visual_matches = list(re.finditer(r"\[Visual:\s*(.*?)\]", slide.content, re.IGNORECASE | re.DOTALL))
+        if visual_matches:
+            best_match = None
+            for match in reversed(visual_matches):
+                if match.group(1).strip():
+                    best_match = match
+                    break
+            if not best_match:
+                best_match = visual_matches[-1]
+            
+            visual_tag = best_match.group(1).strip()
+            start, end = best_match.span()
+            clean_content = slide.content[:start] + slide.content[end:]
+            clean_content = clean_content.strip()
         else:
             clean_content = slide.content
+
         clean_content = REFERENCE_TAG_PATTERN.sub("", clean_content)
-        clean_content = SPEECH_TAG_PATTERN.sub("", clean_content).strip()
+        
+        speech_matches = list(SPEECH_TAG_PATTERN.finditer(clean_content))
+        if speech_matches:
+            best_speech_match = None
+            for match in reversed(speech_matches):
+                if match.group(1).strip():
+                    best_speech_match = match
+                    break
+            if not best_speech_match:
+                best_speech_match = speech_matches[-1]
+            
+            start, end = best_speech_match.span()
+            clean_content = clean_content[:start] + clean_content[end:]
+            clean_content = clean_content.strip()
 
         article_instruction = ""
         if with_articles:
@@ -333,20 +364,23 @@ Render a single polished slide image. The visual composition must tell this slid
     @staticmethod
     def _create_output_pdfs(
         saved_paths: list[Path],
-        output_dir: Path,
         *,
+        slides_pdf_path: Path,
+        speech_pdf_path: Path,
         outline: str | None = None,
     ) -> None:
         if not saved_paths:
             return
-        combined_path = output_dir / "presentation_slides.pdf"
-        create_pdf_from_images(saved_paths, combined_path)
-        print(f"Created {combined_path.name}")
+        create_pdf_from_images(saved_paths, slides_pdf_path)
+        print(f"Created {slides_pdf_path.name}")
         if outline is None:
             return
-        speech_path = output_dir / "presentation_speech.pdf"
-        create_speech_pdf(saved_paths, slides_by_index_from_outline(outline), speech_path)
-        print(f"Created {speech_path.name}")
+        create_speech_pdf(
+            saved_paths,
+            slides_by_index_from_outline(outline),
+            speech_pdf_path,
+        )
+        print(f"Created {speech_pdf_path.name}")
 
     def _make_image_save_callback(
         self,
@@ -413,8 +447,9 @@ Render a single polished slide image. The visual composition must tell this slid
         self,
         prompts: list[ImagePrompt],
         paths: list[Path],
-        output_dir: Path,
         *,
+        slides_pdf_path: Path,
+        speech_pdf_path: Path,
         expected: int,
         outline: str | None = None,
     ) -> tuple[list[Path | None], list[Path]]:
@@ -426,7 +461,12 @@ Render a single polished slide image. The visual composition must tell this slid
         )
         self._report_results(results, expected)
         saved_paths = self._ordered_saved_paths(saved_slots)
-        self._create_output_pdfs(saved_paths, output_dir, outline=outline)
+        self._create_output_pdfs(
+            saved_paths,
+            slides_pdf_path=slides_pdf_path,
+            speech_pdf_path=speech_pdf_path,
+            outline=outline,
+        )
         return saved_slots, saved_paths
 
     async def generate_first_slide_images(
@@ -437,6 +477,9 @@ Render a single polished slide image. The visual composition must tell this slid
         article_pdfs: list[bytes] | None = None,
         article_texts: list[str] | None = None,
         outline_dir: Path | None = None,
+        *,
+        work_dir: Path = DEFAULT_WORK_DIR,
+        run_timestamp: str | None = None,
     ) -> list[Path]:
         """Generate multiple image variants for the first slide only."""
         slides, global_style = _parse_content_slides(outline)
@@ -475,10 +518,12 @@ Render a single polished slide image. The visual composition must tell this slid
             out_dir / f"slide_p{slide.index:02d}_v{i + 1:02d}.png"
             for i in range(copy)
         ]
+        ts = run_timestamp or timestamp_from_image_dir(out_dir) or timestamp_slug()
         _, saved_paths = await self._generate_and_finalize(
             prompts,
             paths,
-            out_dir,
+            slides_pdf_path=presentation_slides_pdf_path(work_dir, ts),
+            speech_pdf_path=presentation_speech_pdf_path(work_dir, ts),
             expected=copy,
             outline=outline,
         )
@@ -494,6 +539,9 @@ Render a single polished slide image. The visual composition must tell this slid
         article_texts: list[str] | None = None,
         page_filter: set[int] | None = None,
         outline_dir: Path | None = None,
+        *,
+        work_dir: Path = DEFAULT_WORK_DIR,
+        run_timestamp: str | None = None,
     ) -> dict[int, list[Path]]:
         """Generate multiple image variants for all slides using style reference(s)."""
         slides, global_style = _parse_content_slides(
@@ -555,10 +603,12 @@ Render a single polished slide image. The visual composition must tell this slid
             for slide in slides
             for v in range(copy)
         ]
+        ts = run_timestamp or timestamp_from_image_dir(out_dir) or timestamp_slug()
         saved_slots, _ = await self._generate_and_finalize(
             all_prompts,
             paths,
-            out_dir,
+            slides_pdf_path=presentation_slides_pdf_path(work_dir, ts),
+            speech_pdf_path=presentation_speech_pdf_path(work_dir, ts),
             expected=total,
             outline=outline,
         )

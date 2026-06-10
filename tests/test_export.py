@@ -76,13 +76,15 @@ def test_collect_slide_image_paths_empty_raises(tmp_path):
 
 
 def test_rebuild_combined_pdf(tmp_path):
+    image_dir = tmp_path / "image_test"
+    image_dir.mkdir()
     for name in ("slide_p01_v01.png", "slide_p02_v01.png"):
         img = Image.new("RGB", (50, 50), color="blue")
-        img.save(tmp_path / name)
+        img.save(image_dir / name)
 
-    pdf_path, count = rebuild_combined_pdf(tmp_path)
+    pdf_path, count = rebuild_combined_pdf(image_dir, pdf_dir=tmp_path, timestamp="test")
     assert count == 2
-    assert pdf_path == tmp_path / "presentation_slides.pdf"
+    assert pdf_path == tmp_path / "presentation_slides_test.pdf"
     assert pdf_path.exists()
 
 
@@ -125,11 +127,15 @@ def test_rebuild_speech_pdf(tmp_path):
 ## Slide 1: Cover
 [Speech: Hello.]
 """
-    Image.new("RGB", (80, 45), color="green").save(tmp_path / "slide_p01_v01.png")
+    image_dir = tmp_path / "image_test"
+    image_dir.mkdir()
+    Image.new("RGB", (80, 45), color="green").save(image_dir / "slide_p01_v01.png")
 
-    pdf_path, count = rebuild_speech_pdf(tmp_path, outline)
+    pdf_path, count = rebuild_speech_pdf(
+        image_dir, outline, pdf_dir=tmp_path, timestamp="test"
+    )
     assert count == 1
-    assert pdf_path == tmp_path / "presentation_speech.pdf"
+    assert pdf_path == tmp_path / "presentation_speech_test.pdf"
     assert pdf_path.exists()
 
 

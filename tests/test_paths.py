@@ -10,9 +10,10 @@ from src.core.paths import (
     DEFAULT_IDEA_PATH,
     DEFAULT_OUTLINE_PATH,
     DEFAULT_WORK_DIR,
-    OUTPUT_DIR_PREFIX,
+    IMAGE_DIR_PREFIX,
     default_output_dir,
     outline_path_for_slides,
+    presentation_slides_pdf_path,
     read_nonempty_text,
 )
 
@@ -29,7 +30,13 @@ def test_default_idea_and_outline_paths() -> None:
 def test_default_output_dir_prefix() -> None:
     path = default_output_dir()
     assert path.parent == DEFAULT_WORK_DIR
-    assert path.name.startswith(OUTPUT_DIR_PREFIX)
+    assert path.name.startswith(IMAGE_DIR_PREFIX)
+
+
+def test_presentation_slides_pdf_path() -> None:
+    assert presentation_slides_pdf_path(DEFAULT_WORK_DIR, "20260610_120000") == (
+        DEFAULT_WORK_DIR / "presentation_slides_20260610_120000.pdf"
+    )
 
 
 def test_outline_path_for_slides() -> None:

@@ -78,7 +78,11 @@ def extract_global_style(slides: list[Slide]) -> str | None:
 
 def extract_speech_text(content: str) -> str | None:
     """Return presenter speech from a slide's ``[Speech:]`` tag, if present."""
-    match = SPEECH_TAG_PATTERN.search(content)
-    if not match:
+    matches = list(SPEECH_TAG_PATTERN.finditer(content))
+    if not matches:
         return None
-    return match.group(1).strip()
+    for match in reversed(matches):
+        val = match.group(1).strip()
+        if val:
+            return val
+    return matches[-1].group(1).strip()

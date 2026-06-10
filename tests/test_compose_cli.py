@@ -205,7 +205,9 @@ def test_missing_outline_file_shows_error(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
-    out = tmp_path / "output_test"
+    work = tmp_path / "work"
+    work.mkdir()
+    out = work / "image_test"
     out.mkdir()
     for name in ("slide_p01_v01.png", "slide_p01_v02.png", "slide_p02_v01.png"):
         Image.new("RGB", (40, 40), color="green").save(out / name)
@@ -232,6 +234,8 @@ def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
         main,
         [
             "--pdf-only",
+            "--work",
+            str(work),
             "--output",
             str(out),
             "--variant",
@@ -241,11 +245,11 @@ def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    assert "presentation_slides.pdf" in result.output
-    assert "presentation_speech.pdf" in result.output
+    assert "presentation_slides_test.pdf" in result.output
+    assert "presentation_speech_test.pdf" in result.output
     assert "2 page" in result.output
-    assert (out / "presentation_slides.pdf").exists()
-    assert (out / "presentation_speech.pdf").exists()
+    assert (work / "presentation_slides_test.pdf").exists()
+    assert (work / "presentation_speech_test.pdf").exists()
 
 
 def test_pdf_only_requires_output(tmp_path: Path) -> None:

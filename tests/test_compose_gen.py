@@ -191,17 +191,19 @@ async def test_generate_first_slide_images_mocked(
         )
     )
 
-    out_dir = tmp_path / "slides"
+    out_dir = tmp_path / "image_test"
     paths = await generator.generate_first_slide_images(
         SAMPLE_OUTLINE,
         copy=2,
         output_dir=out_dir,
+        work_dir=tmp_path,
+        run_timestamp="test",
     )
 
     assert len(paths) == 2
     assert all(p.exists() for p in paths)
-    assert (out_dir / "presentation_slides.pdf").exists()
-    assert (out_dir / "presentation_speech.pdf").exists()
+    assert (tmp_path / "presentation_slides_test.pdf").exists()
+    assert (tmp_path / "presentation_speech_test.pdf").exists()
 
 
 @pytest.mark.asyncio

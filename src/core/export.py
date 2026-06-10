@@ -12,6 +12,13 @@ import img2pdf
 from PIL import Image, ImageDraw, ImageFont
 
 from src.outline.parser import Slide, extract_global_style, extract_speech_text, parse_markdown
+from src.core.paths import (
+    DEFAULT_WORK_DIR,
+    presentation_slides_pdf_path,
+    presentation_speech_pdf_path,
+    timestamp_from_image_dir,
+    timestamp_slug,
+)
 
 SLIDE_IMAGE_PATTERN = re.compile(r"^slide_p(\d+)_v(\d+)\.png$", re.IGNORECASE)
 
@@ -450,37 +457,43 @@ def collect_slide_image_paths(
 
 
 def rebuild_combined_pdf(
-    output_dir: Path,
+    image_dir: Path,
     *,
+    pdf_dir: Path | None = None,
+    timestamp: str | None = None,
     page_filter: set[int] | None = None,
     variant_filter: set[int] | None = None,
-    pdf_name: str = "presentation_slides.pdf",
 ) -> tuple[Path, int]:
-    """Rebuild ``presentation_slides.pdf`` from existing slide PNGs in *output_dir*."""
+    """Rebuild ``presentation_slides_{timestamp}.pdf`` from slide PNGs in *image_dir*."""
     image_paths = collect_slide_image_paths(
-        output_dir,
+        image_dir,
         page_filter=page_filter,
         variant_filter=variant_filter,
     )
-    pdf_path = output_dir / pdf_name
+    work = pdf_dir or DEFAULT_WORK_DIR
+    ts = timestamp or timestamp_from_image_dir(image_dir) or timestamp_slug()
+    pdf_path = presentation_slides_pdf_path(work, ts)
     create_pdf_from_images(image_paths, pdf_path)
     return pdf_path, len(image_paths)
 
 
 def rebuild_speech_pdf(
-    output_dir: Path,
+    image_dir: Path,
     outline_text: str,
     *,
+    pdf_dir: Path | None = None,
+    timestamp: str | None = None,
     page_filter: set[int] | None = None,
     variant_filter: set[int] | None = None,
-    pdf_name: str = "presentation_speech.pdf",
 ) -> tuple[Path, int]:
-    """Rebuild ``presentation_speech.pdf`` from slide PNGs and outline speech tags."""
+    """Rebuild ``presentation_speech_{timestamp}.pdf`` from slide PNGs and outline speech tags."""
     image_paths = collect_slide_image_paths(
-        output_dir,
+        image_dir,
         page_filter=page_filter,
         variant_filter=variant_filter,
     )
-    pdf_path = output_dir / pdf_name
+    work = pdf_dir or DEFAULT_WORK_DIR
+    ts = timestamp or timestamp_from_image_dir(image_dir) or timestamp_slug()
+    pdf_path = presentation_speech_pdf_path(work, ts)
     create_speech_pdf(image_paths, slides_by_index_from_outline(outline_text), pdf_path)
     return pdf_path, len(image_paths)

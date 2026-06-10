@@ -20,7 +20,13 @@ from src.core.client_factory import (
 )
 from src.core.config import load_config
 from src.core.export import rebuild_combined_pdf, rebuild_speech_pdf
-from src.core.paths import DEFAULT_OUTLINE_PATH, DEFAULT_WORK_DIR, default_output_dir
+from src.core.paths import (
+    DEFAULT_OUTLINE_PATH,
+    DEFAULT_WORK_DIR,
+    default_output_dir,
+    timestamp_from_image_dir,
+    timestamp_slug,
+)
 from src.core.resolve import PathResolveError, clean_path_pattern, resolve_patterns
 
 load_dotenv()
@@ -218,27 +224,31 @@ def _parse_page_spec_or_usage(page: str | None) -> set[int] | None:
 def _run_pdf_only(
     output: Path,
     *,
+    work_dir: Path,
     outline: Path | None,
     page: str | None,
     variant: str | None,
 ) -> None:
     page_numbers = _parse_page_spec_or_usage(page)
     variant_numbers = _parse_page_spec_or_usage(variant)
+    ts = timestamp_from_image_dir(output) or timestamp_slug()
     try:
         pdf_path, image_count = rebuild_combined_pdf(
             output,
+            pdf_dir=work_dir,
+            timestamp=ts,
             page_filter=page_numbers,
             variant_filter=variant_numbers,
         )
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
     click.echo(
-        f"Created {pdf_path.name} ({image_count} page(s)) in {output.resolve()}"
+        f"Created {pdf_path.name} ({image_count} page(s)) in {work_dir.resolve()}"
     )
 
     if outline is None or not outline.is_file():
         click.echo(
-            "Skipped presentation_speech.pdf (outline not found; pass --outline to rebuild speech PDF).",
+            "Skipped presentation_speech PDF (outline not found; pass --outline to rebuild speech PDF).",
             err=True,
         )
         return
@@ -247,13 +257,15 @@ def _run_pdf_only(
         speech_path, speech_count = rebuild_speech_pdf(
             output,
             outline.read_text(encoding="utf-8"),
+            pdf_dir=work_dir,
+            timestamp=ts,
             page_filter=page_numbers,
             variant_filter=variant_numbers,
         )
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
     click.echo(
-        f"Created {speech_path.name} ({speech_count} page(s)) in {output.resolve()}"
+        f"Created {speech_path.name} ({speech_count} page(s)) in {work_dir.resolve()}"
     )
 
 
@@ -361,7 +373,8 @@ def _run_generation(
     no_balance: bool,
 ) -> None:
     style_paths = _resolve_style_paths(style, work_dir)
-    out_dir = output or default_output_dir()
+    run_ts = timestamp_slug()
+    out_dir = output or default_output_dir(run_ts)
     config = load_config(
         output_dir=out_dir,
         api_key_override=api_key,
@@ -414,9 +427,12 @@ def _run_generation(
                     article_pdfs=article_pdfs or None,
                     article_texts=article_texts or None,
                     outline_dir=outline.parent,
+                    work_dir=work_dir,
+                    run_timestamp=run_ts,
                 )
                 click.echo(
-                    f"Done. Saved {len(paths)} image(s) and PDFs to {out_dir.resolve()}"
+                    f"Done. Saved {len(paths)} image(s) to {out_dir.resolve()} "
+                    f"and PDFs to {work_dir.resolve()}"
                 )
             else:
                 by_slide = await generator.generate_all_slide_images(
@@ -428,10 +444,13 @@ def _run_generation(
                     article_texts=article_texts or None,
                     page_filter=page_numbers,
                     outline_dir=outline.parent,
+                    work_dir=work_dir,
+                    run_timestamp=run_ts,
                 )
                 total = sum(len(paths) for paths in by_slide.values())
                 click.echo(
-                    f"Done. Saved {total} image(s) and PDFs to {out_dir.resolve()}"
+                    f"Done. Saved {total} image(s) to {out_dir.resolve()} "
+                    f"and PDFs to {work_dir.resolve()}"
                 )
         finally:
             if config.provider == "openrouter" and not no_balance:
@@ -478,7 +497,7 @@ def _run_generation(
     "--output",
     type=click.Path(path_type=Path),
     default=None,
-    help="Output directory for images and PDF. Default: work/slides_YYYYMMDD_HHMMSS/.",
+    help="Output directory for slide PNGs. Default: work/image_YYYYMMDD_HHMMSS/. PDFs go to work/.",
 )
 @click.option(
     "--article",
@@ -527,8 +546,9 @@ def _run_generation(
     is_flag=True,
     default=False,
     help=(
-        "Rebuild presentation_slides.pdf and presentation_speech.pdf from existing slide_p##_v##.png "
-        "files in --output (no API calls). Speech PDF uses --outline when available."
+        "Rebuild presentation_slides_*.pdf and presentation_speech_*.pdf in --work from "
+        "existing slide_p##_v##.png files in --output (no API calls). "
+        "Speech PDF uses --outline when available."
     ),
 )
 @click.option(
@@ -562,13 +582,14 @@ def main(
     if pdf_only and balance_only:
         raise click.UsageError("--pdf-only cannot be used with --balance-only.")
     if pdf_only and output is None:
-        raise click.UsageError("--pdf-only requires --output (existing output directory).")
+        raise click.UsageError("--pdf-only requires --output (existing image directory).")
 
     if pdf_only:
         assert output is not None
         outline_for_pdf = outline_path if outline_path.is_file() else None
         _run_pdf_only(
             output,
+            work_dir=work_dir,
             outline=outline_for_pdf,
             page=page,
             variant=variant,
