@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Style
 
-- Title with emoji: `# ProjectName ✨`
+- Title with emoji: `# VibeSliding ✨`
 - Bold tagline + conversational hook
 - Em-dash descriptions: `**Feature** — Explanation`
 - Emoji bullets sparingly (🚀 🎨 ⚡)
@@ -16,27 +16,40 @@ alwaysApply: true
 ## Structure
 
 1. Title + tagline
-2. Why ProjectName? 🚀 (benefits)
+2. Why VibeSliding? 🚀 (benefits)
 3. Features (emoji bullets)
-4. How It Works (numbered steps)
-5. Quick Start (2-3 commands max)
-6. Usage (basic → advanced examples)
-7. Options table
-8. Input/Output format
-9. Configuration
-10. Examples folder reference
-11. Friendly sign-off
+4. Quick Start (2-3 commands max)
+5. Pipeline (numbered steps with bash block)
+6. Usage Examples (progressive complexity)
+7. CLI Reference (one table per module: `src.research.cli`, `src.outline.cli`, `src.style.cli`, `src.compose.cli`)
+8. Input/Output (work directory tree, outline format, compose output)
+9. Configuration (`.env` section table + provider routing)
+10. License + friendly sign-off
+
+## Canonical Paths
+
+Source of truth for file naming lives in `src/core/paths.py`. Always cross-check when documenting:
+
+- Image output dir: `work/image_YYYYMMDD_HHMMSS/` (prefix `IMAGE_DIR_PREFIX`)
+- Slide PNGs: `slide_p##_v##.png`
+- PDFs go to `--work` dir: `presentation_slides_YYYYMMDD_HHMMSS.pdf`, `presentation_speech_YYYYMMDD_HHMMSS.pdf`
+- Default outline: `work/outline_16.md`
+- Research state: `work/research_state.json`
 
 ## Update When
 
-- CLI options change
-- Dependencies change
-- Config options change
-- Input/output format changes
-- New/removed features
+- CLI options change (check Click decorators in `src/*/cli.py`)
+- Dependencies in `requirements.txt` change
+- Config sections/keys in `.env.example` change
+- Path constants in `src/core/paths.py` change
+- New pipeline steps or providers added
+- Input/output file naming conventions change
 
 ## Rules
 
 - No new .md files — all docs in README.md
 - Bullets over paragraphs
 - Code blocks over descriptions
+- CLI reference tables must match Click `@click.option` decorators exactly
+- Usage examples must use real paths (e.g. `work/image_...` not `work/slides_...`)
+- Work directory tree must include all generated artifacts with correct naming

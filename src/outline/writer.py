@@ -87,6 +87,17 @@ def build_outline_system_prompt(standards: str) -> str:
         "- Follow the outline standards below EXACTLY.\n"
         "- Prefer concrete examples, named tools, and specific numbers over vague abstractions.\n"
         "- Build narrative momentum: each slide flows naturally from the previous one.\n\n"
+        "# CRITICAL QUALITY BARS\n"
+        "These are the standards models most often violate — pay special attention:\n"
+        "- Content slides: 5-6 `**Label:** explanation` bullets where each label is "
+        "self-contained (makes sense without the slide title). End every content slide "
+        "with an explicit takeaway (`Core insight:`, `Core logic:`, or `Anti-pattern:`).\n"
+        "- `[Visual:]` must read as production-ready art direction — name the focal object, "
+        "layout pattern (split-screen / grid / pipeline / roadmap / system diagram), "
+        "foreground/background structure, and narrative device (contrast / sequence / "
+        "hierarchy / cause-effect / before-after).\n"
+        "- `[Speech:]` expands on bullets with context the audience needs to hear — "
+        "never restate bullets verbatim. Aim for 60-90 seconds on content slides.\n\n"
         f"{standards}"
     )
 
@@ -122,6 +133,7 @@ One presentation title line (used as `# PPT Outline: [Title]` in every version).
 
 ### Narrative Spine
 An ordered list of content-slide topics from most essential to optional depth.
+Start with 1-3 hook topics that grab attention and frame the stakes (marked CORE — required in every version).
 For each item include:
 - **Topic:** short slide title seed
 - **Priority:** CORE (required in the shortest version) or EXTENDED (added in longer versions only)
@@ -139,10 +151,10 @@ Every outline version inserts one transition/roadmap slide before each section (
 
 ### Shared Visual System
 Deck-wide art direction every version must reuse:
-- Cover and closing slide visual treatment
+- Cover and closing slide visual treatment — closing visually reconnects to the cover (same focal motif, rendered slightly larger to signal closure) and carries a clear take-home message
 - Transition/roadmap visual pattern (MANDATORY): one consistent section-map composition reused on all 3-6 transition slides, highlighting only the current section and showing a `progress bar N/total` marker
 - Diagram language (boxes, arrows, connectors, icons, glow rules)
-- Recurring motifs and section color accents
+- Recurring motifs (beams, nodes, panels, section color accents) that anchor deck identity across all slide types
 
 ### Appendix: Global Visual Requirements
 The EXACT appendix block to copy verbatim into every outline version.
@@ -191,16 +203,24 @@ Shorter versions are strict subsets of longer ones: keep CORE spine topics with 
 
 ## Target slide count
 Produce exactly **{target_slides} content slides** (teaching slides with substantive bullets and a clear takeaway).
-This count excludes the cover slide, 3-6 transition/roadmap slides, and closing slide — add those separately.
+This count excludes the cover slide, 3-6 transition/roadmap slides, and the closing slide — add those separately.
+
+Expected total slide breakdown:
+- 1 cover slide (opening title; premise immediately legible)
+- 3-6 transition slides (one `Roadmap:` slide before each section)
+- **{target_slides} content slides** (1-3 hook slides + section body + optional call to action)
+- 1 closing slide (take-home message; visually reconnects to cover)
 
 ## DeepResearch report
 {report.strip()}
 
-## Reminders (additions beyond the outline standards already in the system prompt)
-- Transition slides: prefix title with `Roadmap:`, include `progress bar N/total` in `[Visual:]`, keep bullets to 2-4 lines, speech to 15-30s
-- Content slides: end each `[Speech:]` with a bridge sentence leading into the next slide
-- If the report references facts or case studies, reflect them accurately in bullets and speech
-- Reference `style_base.png`, `style_cover.png`, `style_transition.png`, `style_story.png` in `[Visual:]` tags where appropriate
+## Reminders
+- Transition slides: title prefixed `Roadmap:`, `progress bar N/total` in `[Visual:]`, 2-4 bullets, 15-30s speech
+- Content `[Visual:]` tags: name the focal object, a layout pattern (split-screen / grid / pipeline / roadmap / diagram), and a narrative device (contrast / sequence / before-after / cause-effect)
+- Content `[Speech:]` tags: 60-90 seconds; end each with a bridge sentence leading into the next slide
+- Closing slide: include a clear take-home message — the single idea the audience should remember
+- Reference style images in `[Visual:]` where appropriate: `style_base.png`, `style_cover.png`, `style_transition.png`, `style_content.png`
+- Reflect facts, case studies, and citations from the research accurately — prefer specific numbers over vague claims
 """
 
 

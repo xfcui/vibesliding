@@ -49,7 +49,7 @@ python3 -m src.compose.cli
 
 Then **curate** (delete variants you don't love) and **polish** (`--page` to regenerate individual slides).
 
-> 💡 Steps 1–3 share `./work/` — edit files between steps. Compose writes output to `work/slides_YYYYMMDD_HHMMSS/`.
+> 💡 Steps 1–3 share `./work/` — edit files between steps. Compose writes images to `work/image_YYYYMMDD_HHMMSS/` and PDFs to `work/`.
 
 ## Usage Examples
 
@@ -65,8 +65,8 @@ python3 -m src.compose.cli --copy 4
 python3 -m src.compose.cli --outline work/outline_36.md --page "1,3,5-7"
 
 # Compose: rebuild PDF after curating (no API calls)
-python3 -m src.compose.cli --pdf-only --output work/slides_20260520_220006
-python3 -m src.compose.cli --pdf-only --output work/slides_20260520_220006 --variant 1
+python3 -m src.compose.cli --pdf-only --output work/image_20260520_220006
+python3 -m src.compose.cli --pdf-only --output work/image_20260520_220006 --variant 1
 
 # Compose: explicit style files + article references
 python3 -m src.compose.cli --style cover.png --style body.png --article "docs/*.pdf"
@@ -120,13 +120,13 @@ Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic
 | `--copy` | Variants per slide (default: 1) |
 | `--page` | Pages to generate, e.g. `1,3,5-7` |
 | `--article` | Article path(s)/glob, repeatable (`.pdf`, `.md`) |
-| `--output` | Output dir (default: `work/slides_YYYYMMDD_HHMMSS/`) |
+| `--output` | Output dir (default: `work/image_YYYYMMDD_HHMMSS/`); PDFs go to `--work` |
 | `--provider` | `openrouter` or `volcengine` |
 | `--api-key` | API key override |
 | `--proxy` | HTTP/HTTPS proxy (OpenRouter only) |
 | `--balance-only` | Print OpenRouter credits and exit |
 | `--no-balance` | Skip credits line after run |
-| `--pdf-only` | Rebuild PDF from existing PNGs (requires `--output`) |
+| `--pdf-only` | Rebuild PDFs from existing PNGs in `--output` dir (no API calls) |
 | `--variant` | With `--pdf-only`: variant filter, e.g. `1` or `1,2` |
 
 > **Credits:** After each OpenRouter run, remaining credits are printed unless `--no-balance`. Requires an OpenRouter [Management API key](https://openrouter.ai/settings/management-keys) — set `OPENROUTER_MANAGEMENT_API_KEY` or `[openrouter] management_api_key` in `.env`.
@@ -137,18 +137,22 @@ Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic
 
 ```
 work/
-├── idea.md              # seed: title, audience, core message
-├── research.md          # DeepResearch report with citations
-├── source.md            # optional custom source material
-├── style_base.md        # shared style + narrative scaffold
-├── outline_16.md        # 16 content-slide outline
-├── outline_25.md        # 25 content-slide outline
-├── outline_36.md        # 36 content-slide outline
-├── style_base.png       # base plate (palette + typography)
-├── style_cover.png      # cover-slide reference
-├── style_transition.png # transition/roadmap reference
-├── style_content.png    # content-slide reference
-└── style_candidates/    # all candidates + contact sheets
+├── idea.md                                    # seed: title, audience, core message
+├── research.md                                # DeepResearch report with citations
+├── research_state.json                        # (transient) in-progress task state
+├── source.md                                  # optional custom source material
+├── style_base.md                              # shared style + narrative scaffold
+├── outline_16.md                              # 16 content-slide outline
+├── outline_25.md                              # 25 content-slide outline
+├── outline_36.md                              # 36 content-slide outline
+├── style_base.png                             # base plate (palette + typography)
+├── style_cover.png                            # cover-slide reference
+├── style_transition.png                       # transition/roadmap reference
+├── style_content.png                          # content-slide reference
+├── style_candidates/                          # all candidates + contact sheets
+├── image_YYYYMMDD_HHMMSS/                     # compose output (slide PNGs)
+├── presentation_slides_YYYYMMDD_HHMMSS.pdf    # combined slide deck
+└── presentation_speech_YYYYMMDD_HHMMSS.pdf    # A4: slide image + speech notes
 ```
 
 ### Outline Format
@@ -184,12 +188,13 @@ Include **3–6 transition slides** (titles prefixed `Roadmap:`) with `progress 
 ### Compose Output
 
 ```
-work/slides_YYYYMMDD_HHMMSS/
-├── slide_p01_v01.png   # Slide 1, variant 1
-├── slide_p01_v02.png   # Slide 1, variant 2
-├── slide_p02_v01.png   # Slide 2, variant 1
-├── presentation_slides.pdf    # all slides in one PDF
-└── presentation_speech.pdf    # A4: slide image + speech notes
+work/
+├── image_YYYYMMDD_HHMMSS/
+│   ├── slide_p01_v01.png              # Slide 1, variant 1
+│   ├── slide_p01_v02.png              # Slide 1, variant 2
+│   └── slide_p02_v01.png              # Slide 2, variant 1
+├── presentation_slides_YYYYMMDD_HHMMSS.pdf   # all slides in one PDF
+└── presentation_speech_YYYYMMDD_HHMMSS.pdf   # A4: slide image + speech notes
 ```
 
 ## Configuration
@@ -207,10 +212,6 @@ Copy `.env.example` → `.env` and fill in your keys. INI-style sections:
 - **Outline** → `txt_model` from `[openrouter]` (text only)
 - **Style / Compose** → `img_model` from the active `provider`
 - `ark_api_key` in the preamble aliases `[volcengine] api_key`
-
-## Examples
-
-See `examples/` for sample outlines and style references.
 
 ## License
 
