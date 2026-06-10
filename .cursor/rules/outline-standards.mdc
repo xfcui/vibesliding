@@ -38,25 +38,35 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 - Separate the title, every slide, and the appendix with `---`.
 - Use sequential slide headers: `## Slide N: [Title]`.
 - End every slide with one `[Visual: ...]` tag and one `[Speech: ...]` tag.
-- Include 3-6 transition slides that segment the deck into sections (see Transition Slide Quota).
+- Include one transition slide before each section (see Slide Counting & Quotas).
 - Include `## Appendix: Global Visual Requirements` after the final slide.
 
 ## Slide Categories
 
-Use exactly these three slide categories:
+Every slide is either a **content slide** (counted toward the requested slide count) or a **non-content slide** (NOT counted). The requested slide count always refers to content slides only.
 
-- **Cover-Ending Slides:** Use for the opening title slide and final Q&A/thank-you slide. Keep bullets to 2-4 lines, make the premise or closing takeaway immediately legible, and visually reconnect the ending to the cover.
-- **Transition Slides:** Use for objectives, section dividers, roadmaps, and major act changes. Repeat the full roadmap or section map, bold only the current section, and include a visual progress marker such as `progress bar N/total`.
-- **Content Slides:** Use for teaching, concepts, workflows, case studies, comparisons, and conclusions. Teach one clear idea with 5-6 substantial bullets and an explicit takeaway such as `Core insight:`, `Core logic:`, or `Anti-pattern:`.
+### Content Slides (counted)
 
-### Transition Slide Quota
+Teach one clear idea per slide with 5-6 substantial bullets and an explicit takeaway such as `Core insight:`, `Core logic:`, or `Anti-pattern:`. Content slides fall into three roles:
 
-Every deck MUST include **3-6 transition slides** that divide the content into clear sections:
+- **Hook (1-3 slides, at the beginning):** Grab attention and frame the stakes — the problem, tension, surprising fact, or question the deck will resolve. Required.
+- **Sections (3-6 sections):** The body of the deck, where each section is a run of content slides teaching, demonstrating, or comparing one idea (concepts, workflows, case studies, conclusions). For a long section, optionally open it with a high-level explanation/overview slide that previews what the section covers.
+- **Call to Action (1 slide, at the end):** The decisive next step, ask, or takeaway the audience should leave with. Optional.
 
-- Place one transition slide before each major section so the deck reads as 3-6 acts, never one undifferentiated run of content slides.
+### Non-content Slides (NOT counted)
+
+Structural and navigational slides that frame the deck. Keep bullets minimal (2-4 lines):
+
+- **Cover slide:** Opening title slide; make the premise immediately legible. Exactly one, at the start.
+- **Transition slides:** One before each section (so 3-6 total, matching the section count). Repeat the full roadmap or section map, bold only the current section, and include a visual progress marker such as `progress bar N/total`.
+- **Ending slides:** Closing Q&A / thank-you slide(s) that visually reconnect to the cover. MUST include a clear take-home message — the single idea the audience should remember.
+
+### Slide Counting & Quotas
+
+- The requested slide count counts **content slides only** (hook + sections + optional call to action). Cover, transition, and ending slides are always extra.
+- Every deck MUST divide its content into **3-6 sections**, with exactly **one transition slide before each section** so the deck reads as 3-6 acts, never one undifferentiated run of content slides.
 - Make each transition slide detectable: prefix its title with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`) **and** include a progress marker such as `progress bar N/total` in its `[Visual:]` tag.
 - Reuse one consistent roadmap/section-map composition across all transition slides, bolding or highlighting only the current section each time.
-- Transition slides are in addition to the cover, ending, and the requested content-slide count.
 
 ## Writing Standards
 
