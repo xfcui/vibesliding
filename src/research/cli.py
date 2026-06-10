@@ -127,65 +127,68 @@ def main(
         )
 
     try:
-        if resume or task_id is not None:
-            saved_state = None
-            if task_id is None:
+        try:
+            if resume or task_id is not None:
+                saved_state = None
+                if task_id is None:
+                    try:
+                        saved_state = load_research_state(state_path)
+                    except ValueError as exc:
+                        raise click.UsageError(str(exc)) from exc
+                    task_id = saved_state.task_id
+
+                resume_mode = (
+                    mode_override
+                    if mode_override is not None
+                    else (saved_state.mode if saved_state is not None else config.valyu_mode)
+                )
+                click.echo(f"Resuming DeepResearch task {task_id} (mode: {resume_mode})...")
+                result = resume_deepresearch(
+                    task_id,
+                    api_key=config.valyu_api_key or "",
+                    mode=resume_mode,
+                    on_progress=progress,
+                    on_status_retry=_on_status_retry,
+                    state_path=state_path if saved_state is not None else None,
+                )
+            else:
+                if state_path.is_file() and not fresh:
+                    raise click.UsageError(
+                        f"Incomplete DeepResearch run detected ({state_path.name}). "
+                        "Run with --resume to continue polling the existing task, "
+                        "or --fresh to start a new one."
+                    )
+                if fresh and state_path.is_file():
+                    clear_research_state(state_path)
+                    click.echo("Cleared previous research state; starting fresh.")
+
+                idea_path = work_dir / IDEA_FILENAME
                 try:
-                    saved_state = load_research_state(state_path)
+                    idea = read_nonempty_text(idea_path, label="Idea file")
                 except ValueError as exc:
                     raise click.UsageError(str(exc)) from exc
-                task_id = saved_state.task_id
 
-            resume_mode = (
-                mode_override
-                if mode_override is not None
-                else (saved_state.mode if saved_state is not None else config.valyu_mode)
-            )
-            click.echo(f"Resuming DeepResearch task {task_id} (mode: {resume_mode})...")
-            result = resume_deepresearch(
-                task_id,
-                api_key=config.valyu_api_key or "",
-                mode=resume_mode,
-                on_progress=progress,
-                on_status_retry=_on_status_retry,
-                state_path=state_path if saved_state is not None else None,
-            )
-        else:
-            if state_path.is_file() and not fresh:
-                raise click.UsageError(
-                    f"Incomplete DeepResearch run detected ({state_path.name}). "
-                    "Run with --resume to continue polling the existing task, "
-                    "or --fresh to start a new one."
+                click.echo(f"Idea: {idea_path.resolve()}")
+                click.echo(f"Valyu mode: {config.valyu_mode}")
+                if config.valyu_categories:
+                    click.echo(f"Valyu categories: {', '.join(config.valyu_categories)}")
+                else:
+                    click.echo("Valyu categories: all")
+                click.echo("Starting DeepResearch (this may take several minutes)...")
+
+                result = run_deepresearch(
+                    idea,
+                    api_key=config.valyu_api_key or "",
+                    mode=config.valyu_mode,
+                    categories=config.valyu_categories,
+                    on_progress=progress,
+                    on_status_retry=_on_status_retry,
+                    state_path=state_path,
                 )
-            if fresh and state_path.is_file():
-                clear_research_state(state_path)
-                click.echo("Cleared previous research state; starting fresh.")
-
-            idea_path = work_dir / IDEA_FILENAME
-            try:
-                idea = read_nonempty_text(idea_path, label="Idea file")
-            except ValueError as exc:
-                raise click.UsageError(str(exc)) from exc
-
-            click.echo(f"Idea: {idea_path.resolve()}")
-            click.echo(f"Valyu mode: {config.valyu_mode}")
-            if config.valyu_categories:
-                click.echo(f"Valyu categories: {', '.join(config.valyu_categories)}")
-            else:
-                click.echo("Valyu categories: all")
-            click.echo("Starting DeepResearch (this may take several minutes)...")
-
-            result = run_deepresearch(
-                idea,
-                api_key=config.valyu_api_key or "",
-                mode=config.valyu_mode,
-                categories=config.valyu_categories,
-                on_progress=progress,
-                on_status_retry=_on_status_retry,
-                state_path=state_path,
-            )
-    finally:
-        progress.close()
+        finally:
+            progress.close()
+    except Exception as exc:
+        raise click.ClickException(f"DeepResearch failed: {exc}") from exc
 
     if state_path.is_file():
         clear_research_state(state_path)
@@ -197,7 +200,10 @@ def main(
 
     click.echo("")
     click.echo("Review research.md, then generate outlines:")
-    click.echo("python3 -m src.outline.cli")
+    if work_dir != DEFAULT_WORK_DIR:
+        click.echo(f"python3 -m src.outline.cli --work {work_dir}")
+    else:
+        click.echo("python3 -m src.outline.cli")
 
 
 if __name__ == "__main__":

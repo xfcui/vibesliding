@@ -137,7 +137,10 @@ def main(
             text_model=config.txt_model,
         )
 
-    style_scaffold, results = asyncio.run(_run_all())
+    try:
+        style_scaffold, results = asyncio.run(_run_all())
+    except Exception as exc:
+        raise click.ClickException(f"Outline generation failed: {exc}") from exc
 
     scaffold_path = work_dir / STYLE_SCAFFOLD_FILENAME
     scaffold_path.write_text(style_scaffold, encoding="utf-8")
@@ -155,7 +158,10 @@ def main(
     default_outline = outline_path_for_slides(work_dir, slide_counts[0])
     click.echo("")
     click.echo("Review and edit the outlines, then generate style references:")
-    click.echo(f"python3 -m src.style.cli --outline {default_outline}")
+    if work_dir != DEFAULT_WORK_DIR:
+        click.echo(f"python3 -m src.style.cli --work {work_dir} --outline {default_outline}")
+    else:
+        click.echo(f"python3 -m src.style.cli --outline {default_outline}")
 
 
 if __name__ == "__main__":

@@ -214,10 +214,16 @@ def main(
     click.echo(f"  - {(work_dir / 'style_candidates').resolve()}/ (all candidates)")
 
     style_glob = str(work_dir / "style_*.png")
-    next_cmd = (
-        f'python3 -m src.compose.cli --outline {outline_path} '
-        f'--style "{style_glob}"'
-    )
+    if work_dir != DEFAULT_WORK_DIR:
+        next_cmd = (
+            f'python3 -m src.compose.cli --outline {outline_path} '
+            f'--style "{style_glob}" --work {work_dir}'
+        )
+    else:
+        next_cmd = (
+            f'python3 -m src.compose.cli --outline {outline_path} '
+            f'--style "{style_glob}"'
+        )
     click.echo("")
     click.echo("Review style references, then compose slides:")
     click.echo(next_cmd)

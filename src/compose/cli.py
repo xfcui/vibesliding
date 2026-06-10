@@ -240,8 +240,8 @@ def _run_pdf_only(
             page_filter=page_numbers,
             variant_filter=variant_numbers,
         )
-    except ValueError as exc:
-        raise click.UsageError(str(exc)) from exc
+    except Exception as exc:
+        raise click.ClickException(f"Failed to rebuild combined PDF: {exc}") from exc
     click.echo(
         f"Created {pdf_path.name} ({image_count} page(s)) in {work_dir.resolve()}"
     )
@@ -262,8 +262,8 @@ def _run_pdf_only(
             page_filter=page_numbers,
             variant_filter=variant_numbers,
         )
-    except ValueError as exc:
-        raise click.UsageError(str(exc)) from exc
+    except Exception as exc:
+        raise click.ClickException(f"Failed to rebuild speech PDF: {exc}") from exc
     click.echo(
         f"Created {speech_path.name} ({speech_count} page(s)) in {work_dir.resolve()}"
     )
@@ -296,7 +296,10 @@ def _run_balance_only(
     async def _balance() -> None:
         await _echo_openrouter_account_credits(or_client)
 
-    asyncio.run(_balance())
+    try:
+        asyncio.run(_balance())
+    except Exception as exc:
+        raise click.ClickException(f"Failed to fetch balance: {exc}") from exc
 
 
 def _load_article_content(
@@ -308,10 +311,13 @@ def _load_article_content(
     article_paths = expand_article_paths(article_patterns, base_dir=outline.parent)
     for path in article_paths:
         suffix = path.suffix.lower()
-        if suffix == ".pdf":
-            article_pdfs.append(path.read_bytes())
-        else:
-            article_texts.append(path.read_text(encoding="utf-8"))
+        try:
+            if suffix == ".pdf":
+                article_pdfs.append(path.read_bytes())
+            else:
+                article_texts.append(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise click.ClickException(f"Failed to read article file {path.resolve()}: {exc}") from exc
     return article_pdfs, article_texts, article_paths
 
 
@@ -456,7 +462,10 @@ def _run_generation(
             if config.provider == "openrouter" and not no_balance:
                 await _echo_openrouter_account_credits(cast(OpenRouterClient, client))
 
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except Exception as exc:
+        raise click.ClickException(f"Slide generation failed: {exc}") from exc
 
 
 @click.command()

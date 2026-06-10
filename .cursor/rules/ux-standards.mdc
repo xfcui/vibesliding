@@ -1,0 +1,114 @@
+---
+description: User Experience (UX/UE) standards for Python CLI tools and scripts
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# User Experience (UX/UE) Standards for CLI Tools
+
+All Python CLI commands and scripts must deliver a polished, resilient, and user-friendly experience. A great CLI should feel like a guided conversation, never leave the user in the dark, and fail gracefully with actionable suggestions.
+
+## Core Principles
+
+- **No Raw Tracebacks:** Never let raw Python tracebacks leak to the user for predictable failures (e.g., missing files, invalid inputs, API timeouts, or configuration errors).
+- **Progress Transparency:** Never leave the user guessing during long-running operations. Always use progress indicators (e.g., `tqdm`, spinners, or clear step-by-step logs).
+- **Actionable Next Steps:** Guide the user through the pipeline by printing the exact command they should run next.
+- **Interactive Resilience:** Support both interactive (TTY) and automated (non-TTY/CI) environments gracefully.
+
+---
+
+## Implementation Rules
+
+### 1. CLI Options & Early Validation
+- Use `click` for CLI argument parsing.
+- Validate all user inputs, file paths, and environment variables *before* starting any expensive operations or API calls.
+- Raise `click.UsageError` or `click.ClickException` for validation failures.
+
+### 2. Graceful Error Handling
+- Catch predictable exceptions (e.g., `FileNotFoundError`, `ValueError`, `httpx.HTTPError`) at the top level of CLI entry points.
+- Print warnings to `stderr` using `click.echo(..., err=True)` without crashing if the pipeline can proceed.
+- For fatal errors, print a clear, human-readable error message and exit with a non-zero code.
+
+### 3. Absolute Path Resolution
+- When printing file or directory paths to the console, always resolve them to absolute paths using `.resolve()` so the user knows exactly where the files are located.
+
+### 4. Interactive Prompts
+- Always check `sys.stdin.isatty()` before prompting the user for input.
+- If running in a non-TTY environment (like CI or a script), fall back to sensible defaults or raise a clear exception instead of hanging.
+- Validate interactive inputs in a loop and re-prompt with helpful error messages.
+
+### 5. Actionable Next Steps
+- Upon successful execution, print a clear success message followed by the exact command the user should run next to continue the pipeline.
+
+---
+
+## Code Examples
+
+### Error Handling & Validation
+
+```python
+# ❌ BAD - Leaks traceback on missing file, doesn't resolve path
+@click.command()
+@click.option("--input", type=Path, required=True)
+def main(input: Path):
+    # Crashes with FileNotFoundError traceback if file doesn't exist
+    content = input.read_text()
+    click.echo(f"Loaded {input}")
+
+# ✅ GOOD - Validates early, catches exceptions, resolves paths
+@click.command()
+@click.option("--input", type=click.Path(path_type=Path), required=True)
+def main(input: Path):
+    resolved_path = input.resolve()
+    if not resolved_path.is_file():
+        raise click.UsageError(f"Input file not found: {resolved_path}")
+        
+    try:
+        content = resolved_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        raise click.ClickException(f"Failed to read input file: {exc}")
+        
+    click.echo(f"Loaded input: {resolved_path}")
+```
+
+### Interactive Prompts (TTY vs Non-TTY)
+
+```python
+# ❌ BAD - Hangs indefinitely in CI/non-TTY environments
+@click.command()
+def main():
+    choice = click.prompt("Enter option (1-4)", type=int)
+    click.echo(f"Selected: {choice}")
+
+# ✅ GOOD - Handles non-TTY gracefully, validates in a loop
+import sys
+
+def get_user_choice(default: int = 1) -> int:
+    if not sys.stdin.isatty():
+        click.echo(f"No TTY detected; defaulting to option {default}")
+        return default
+        
+    while True:
+        raw = click.prompt("Enter option (1-4)", type=str).strip()
+        try:
+            choice = int(raw)
+            if 1 <= choice <= 4:
+                return choice
+        except ValueError:
+            pass
+        click.echo("Invalid choice. Please enter a number between 1 and 4.")
+```
+
+### Actionable Next Steps
+
+```python
+# ❌ BAD - Ends abruptly without guidance
+click.echo("Outline generated successfully.")
+
+# ✅ GOOD - Guides the user to the next stage of the pipeline
+click.echo("Outline generated successfully!")
+click.echo(f"Saved outline to: {outline_path.resolve()}")
+click.echo("")
+click.echo("Review and edit the outline, then generate style references:")
+click.echo(f"python3 -m src.style.cli --outline {outline_path}")
+```
