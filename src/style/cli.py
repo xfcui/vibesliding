@@ -80,15 +80,16 @@ def build_style_selector(
         click.echo("")
         click.echo(f"Stage {stage_num}/{total_stages}: {label}")
         click.echo(f"Contact sheet: {choices_path.resolve()}")
-        try:
-            click.launch(str(choices_path.resolve()))
-        except Exception:
-            pass
         if not is_tty:
             click.echo(
                 f"No TTY and no --pick; defaulting {label} to candidate 1."
             )
             return 1
+
+        try:
+            click.launch(str(choices_path.resolve()))
+        except Exception:
+            pass
 
         click.echo(f"Enter 1-{count} to pick, or r to regenerate.")
         while True:
