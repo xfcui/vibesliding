@@ -121,7 +121,7 @@ def main(
 
     def _on_status_retry(error: str, attempt: int, wait_s: float) -> None:
         click.echo(
-            f"Network issue while polling DeepResearch (attempt {attempt}); "
+            f"Network issue during DeepResearch (attempt {attempt}); "
             f"retrying in {wait_s:.0f}s: {error}",
             err=True,
         )

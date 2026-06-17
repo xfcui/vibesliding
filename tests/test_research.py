@@ -15,9 +15,11 @@ from src.research import (
 from src.research.deepresearch import (
     MODE_POLL_SETTINGS,
     ResearchState,
+    _create_deepresearch_resilient,
     _fetch_status_resilient,
     _is_transient_status_error,
     clear_research_state,
+    create_deepresearch_task,
     format_progress,
     load_research_state,
     resolve_datasource_ids,
@@ -372,3 +374,42 @@ class TestResearchState:
             )
 
         assert not state_path.is_file()
+
+
+class TestCreateRetries:
+    def test_create_retries_transient_failures(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sleeps: list[float] = []
+        monkeypatch.setattr("src.research.deepresearch.time.sleep", lambda s: sleeps.append(s))
+
+        transient = SimpleNamespace(
+            success=False,
+            error=("Connection aborted.", ConnectionResetError(54, "Connection reset by peer")),
+            deepresearch_id=None,
+        )
+        created = SimpleNamespace(success=True, deepresearch_id="dr_retry", error=None)
+        mock_deepresearch = MagicMock()
+        mock_deepresearch.create.side_effect = [transient, created]
+        mock_valyu = MagicMock()
+        mock_valyu.deepresearch = mock_deepresearch
+
+        task_id = _create_deepresearch_resilient(
+            mock_valyu,
+            {"query": "topic", "mode": "standard", "output_formats": ["markdown"]},
+        )
+
+        assert task_id == "dr_retry"
+        assert mock_deepresearch.create.call_count == 2
+        assert sleeps == [2.0]
+
+    def test_billing_error_raises(self) -> None:
+        mock_task = SimpleNamespace(
+            success=False,
+            error="Monthly credit limit exceeded. Please increase your limits.",
+            deepresearch_id=None,
+        )
+        mock_valyu = MagicMock()
+        mock_valyu.deepresearch.create.return_value = mock_task
+
+        with patch("valyu.Valyu", return_value=mock_valyu):
+            with pytest.raises(RuntimeError, match="Failed to create DeepResearch task"):
+                create_deepresearch_task("AI agents in software", api_key="key")
