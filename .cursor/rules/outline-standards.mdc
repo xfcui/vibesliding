@@ -38,7 +38,7 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 - Separate the title, every slide, and the appendix with `---`.
 - Use sequential slide headers: `## Slide N: [Title]`.
 - End every slide with one `[Visual: ...]` tag and one `[Speech: ...]` tag.
-- Include one transition slide before each section (see Slide Counting & Quotas).
+- Include one transition slide before each section — no transition before hook or call to action (see Slide Counting & Quotas).
 - Include `## Appendix: Global Visual Requirements` after the final slide.
 
 ## Slide Categories
@@ -58,13 +58,13 @@ Teach one clear idea per slide with 5-6 substantial bullets and an explicit take
 Structural and navigational slides that frame the deck. Keep bullets minimal (2-4 lines):
 
 - **Cover slide:** Opening title slide; make the premise immediately legible. Exactly one, at the start.
-- **Transition slides:** One before each section (so 3-6 total, matching the section count). Repeat the full roadmap or section map, bold only the current section, and include a visual progress marker such as `progress bar N/total`.
+- **Transition slides:** One before each section (so 3-6 total, matching the section count); NO transition before the hook or call to action. Hook slides start immediately after the cover slide. Repeat the full roadmap or section map, bold only the current section, and include a visual progress marker such as `progress bar N/total`.
 - **Ending slides:** Closing Q&A / thank-you slide(s) that visually reconnect to the cover. MUST include a clear take-home message — the single idea the audience should remember.
 
 ### Slide Counting & Quotas
 
 - The requested slide count counts **content slides only** (hook + sections + optional call to action). Cover, transition, and ending slides are always extra.
-- Every deck MUST divide its content into **3-6 sections**, with exactly **one transition slide before each section** so the deck reads as 3-6 acts, never one undifferentiated run of content slides.
+- Every deck MUST divide its content into **3-6 sections**, with exactly **one transition slide before each section** (but none before hook or call to action) so the deck reads as 3-6 acts, never one undifferentiated run of content slides. The hook starts immediately after the cover slide.
 - Make each transition slide detectable: prefix its title with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`) **and** include a progress marker such as `progress bar N/total` in its `[Visual:]` tag.
 - Reuse one consistent roadmap/section-map composition across all transition slides, bolding or highlighting only the current section each time.
 

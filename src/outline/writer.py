@@ -147,7 +147,7 @@ Group the narrative spine into **3-6 sections** (acts). For each section give:
 - **Section:** short section title
 - **Roadmap label:** 2-3 word uppercase chip label (e.g. `01 / ESSENTIALS`)
 
-Every outline version inserts one transition/roadmap slide before each section (3-6 transition slides total), so all versions share the same section structure regardless of content-slide count.
+Every outline version inserts one transition/roadmap slide before each section (3-6 transition slides total); NO transition before the hook or call to action — hook slides start immediately after the cover. All versions share the same section structure regardless of content-slide count.
 
 ### Shared Visual System
 Deck-wide art direction every version must reuse:
@@ -205,17 +205,19 @@ Shorter versions are strict subsets of longer ones: keep CORE spine topics with 
 Produce exactly **{target_slides} content slides** (teaching slides with substantive bullets and a clear takeaway).
 This count excludes the cover slide, 3-6 transition/roadmap slides, and the closing slide — add those separately.
 
-Expected total slide breakdown:
+Expected total slide breakdown (in this order):
 - 1 cover slide (opening title; premise immediately legible)
-- 3-6 transition slides (one `Roadmap:` slide before each section)
-- **{target_slides} content slides** (1-3 hook slides + section body + optional call to action)
+- 1-3 hook slides (immediately after cover — NO transition before hook)
+- [transition slide → section body slides] × 3-6 sections (one `Roadmap:` slide before each section)
+- optional 1 call-to-action slide (NO transition before it)
 - 1 closing slide (take-home message; visually reconnects to cover)
 
 ## DeepResearch report
 {report.strip()}
 
 ## Reminders
-- Transition slides: title prefixed `Roadmap:`, `progress bar N/total` in `[Visual:]`, 2-4 bullets, 15-30s speech
+- Slide order: cover → hook (no transition) → [transition → section] × N → optional call to action (no transition) → closing
+- Transition slides: title prefixed `Roadmap:`, `progress bar N/total` in `[Visual:]`, 2-4 bullets, 15-30s speech; one per section only
 - Content `[Visual:]` tags: name the focal object, a layout pattern (split-screen / grid / pipeline / roadmap / diagram), and a narrative device (contrast / sequence / before-after / cause-effect)
 - Content `[Speech:]` tags: 60-90 seconds; end each with a bridge sentence leading into the next slide
 - Closing slide: include a clear take-home message — the single idea the audience should remember
