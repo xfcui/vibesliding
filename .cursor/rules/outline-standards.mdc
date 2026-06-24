@@ -24,6 +24,7 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 ## Slide 1: [Slide Title]
 - **Label:** Self-contained explanation that states why the point matters
 - Core insight: Main takeaway that ties the slide together
+[Reference: path/to/image.jpg]
 [Visual: Main composition and focal object; layout direction; recurring motifs; style constraints; no watermark or fake logos]
 [Speech: Conversational presenter narration for this slide]
 
@@ -40,6 +41,16 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 - End every slide with one `[Visual: ...]` tag and one `[Speech: ...]` tag.
 - Include one transition slide before each section — no transition before hook or call to action (see Slide Counting & Quotas).
 - Include `## Appendix: Global Visual Requirements` after the final slide.
+
+## Reference Image Tags
+
+If a slide uses any specific reference images (e.g., a presenter's headshot, a specific diagram/chart reference, or a photo reference), you MUST explicitly declare them using a slide-scoped reference tag.
+
+- **Format:** Use `[Reference: path/to/image.png]` or `[Refs: path/to/image.png]`. Multiple references can be separated by commas, e.g., `[Reference: path/1.png, path/2.jpg]`.
+- **Placement:** Put the `[Reference: ...]` tag immediately before the `[Visual: ...]` tag of the slide.
+- **Why it matters:** The image generation orchestrator only reads, loads, and sends reference images to the API if they are explicitly declared in a `[Reference: ...]` tag. Simply mentioning the image path inside the `[Visual: ...]` tag is NOT enough, as the orchestrator will not load it.
+- **Supported formats:** `.png`, `.jpg`, `.jpeg`.
+- **Path Resolution:** Relative paths are resolved relative to the outline file's parent directory or the workspace root. Always verify the file exists before referencing it.
 
 ## Slide Categories
 
@@ -94,6 +105,7 @@ Write `[Visual:]` prompts as production-ready art direction that tells the slide
 - Specify the focal object, foreground/background structure, and layout pattern: split-screen, grid, pipeline, roadmap, or system diagram.
 - Show the narrative visually through contrast, sequence, hierarchy, cause/effect, before/after, or movement through a workflow.
 - Preserve deck continuity with recurring motifs such as beams, nodes, panels, icons, section colors, or progress markers.
+- **Two-tone backgrounds:** Content slides use the primary background color; non-content slides (cover, transitions, ending) use a slightly deeper/darker variant (~4–6 units darker in lightness) to create a visual "curtain" that distinguishes structural pauses from teaching slides.
 - Keep generated-image text minimal; avoid dense labels, watermarks, fake logos, AI-generation stamps, and decorative text unless required.
 - When reference slide images exist, extract concrete style rules from them and reuse those rules in later visual prompts.
 
@@ -109,7 +121,7 @@ Write `[Speech:]` as natural presenter narration.
 
 The appendix defines **text-describable** deck-wide constraints only. Do NOT define layout, composition, diagram, icon, motif, or animation styles here — those are visual styles owned by each slide's `[Visual:]` tag and the style reference images.
 
-- **Theme:** Color palette with hex codes (background, primary accent, secondary accent, warning/de-emphasis colors)
+- **Theme:** Color palette with hex codes (background, primary accent, secondary accent, warning/de-emphasis colors). Use two distinct background tones: a slightly brighter shade for content slides (readability) and a deeper shade for non-content slides — cover, transitions, and ending — creating a subtle "curtain" effect that signals structural pauses between sections.
 - **Fonts:** Title, body, and code fonts with weights and point sizes
 - **Format:** Optional numeric constants only (16:9 aspect ratio, safe-margin %, minimum contrast ratio)
 
