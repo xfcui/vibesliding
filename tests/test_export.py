@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from src.core.api_client import STYLE_IMAGE_PIXEL_SIZE
 from src.core.export import (
@@ -10,9 +10,12 @@ from src.core.export import (
     create_speech_pdf,
     rebuild_combined_pdf,
     rebuild_speech_pdf,
+    render_speech_page,
     save_image,
     save_style_reference_image,
     slides_by_index_from_outline,
+    _load_truetype_font,
+    _wrap_text_lines,
 )
 
 
@@ -173,3 +176,79 @@ def test_build_contact_sheet_with_title(tmp_path):
 def test_build_contact_sheet_empty_raises(tmp_path):
     with pytest.raises(ValueError, match="At least one image"):
         build_contact_sheet([], tmp_path / "empty.png")
+
+
+def test_wrap_text_lines_chinese(tmp_path):
+    font = _load_truetype_font(24)
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    max_width = 240
+    speech = (
+        "各位老师，各位家长，亲爱的2022级计算机菁英班的同学们，"
+        "大家下午好！今天是属于你们的日子。"
+    )
+    lines = _wrap_text_lines(speech, font, max_width, draw)
+
+    assert len(lines) >= 2
+    assert all(_line_width(line, font, draw) <= max_width for line in lines if line)
+    assert "".join(line.replace(" ", "") for line in lines) == speech.replace(" ", "")
+
+
+def _line_width(line, font, draw):
+    if not line:
+        return 0
+    bbox = draw.textbbox((0, 0), line, font=font)
+    return bbox[2] - bbox[0]
+
+
+def test_wrap_text_lines_mixed_chinese_english(tmp_path):
+    font = _load_truetype_font(24)
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    max_width = 300
+    speech = "CCPC 2024 赛场：薛润泽、郭荣祥、乐恩玮组队出战中国大学生程序设计竞赛"
+    lines = _wrap_text_lines(speech, font, max_width, draw)
+
+    assert len(lines) >= 2
+    assert all(_line_width(line, font, draw) <= max_width for line in lines if line)
+    joined = "".join(
+        part for line in lines for part in line.split()
+    )
+    assert "CCPC" in joined
+    assert "薛润泽" in speech
+
+
+def test_create_speech_pdf_chinese(tmp_path):
+    outline = """# PPT Outline: 测试
+
+---
+
+## Slide 1: 海阔天空
+- 封面
+[Visual: cover]
+[Speech: 各位老师，各位家长，亲爱的同学们，大家下午好！]
+
+---
+"""
+    img = Image.new("RGB", (320, 180), color="red")
+    img.save(tmp_path / "slide_p01_v01.png")
+
+    pdf_path = tmp_path / "presentation_speech_zh.pdf"
+    create_speech_pdf(
+        [tmp_path / "slide_p01_v01.png"],
+        slides_by_index_from_outline(outline),
+        pdf_path,
+    )
+
+    assert pdf_path.exists()
+    assert pdf_path.stat().st_size > 0
+
+
+def test_render_speech_page_chinese_title(tmp_path):
+    slide_path = tmp_path / "slide_p01_v01.png"
+    Image.new("RGB", (320, 180), color="blue").save(slide_path)
+    page = render_speech_page(
+        slide_path,
+        slide_number=1,
+        slide_title="海阔天空，大有可为",
+        speech_text="今天是属于你们的日子。",
+    )
+    assert page.size == (1240, 1754)

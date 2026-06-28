@@ -95,7 +95,104 @@ def build_style_ref_jobs(
     title = presentation_title or extract_presentation_title(outline, fallback=idea)
     visual_requirements = _visual_requirements_block(outline)
 
-    base_prompt = f"""CREATE STYLE REFERENCE: MASTER BACKGROUND & MOTIF PLATE
+    req_lower = visual_requirements.lower()
+    is_white_dominant = (
+        "white" in req_lower
+        or "light" in req_lower
+        or "white-dominant" in req_lower
+        or "pure white" in req_lower
+    )
+
+    if is_white_dominant:
+        # White-dominant (light) theme prompts
+        base_prompt = f"""CREATE STYLE REFERENCE: MASTER BACKGROUND & MOTIF PLATE
+Presentation topic: "{title}"
+Idea seed: {idea.strip()[:500]}
+{visual_requirements}
+Generate a clean, cohesive master background and motif plate on a single 1920×1080 canvas. This plate is the visual blueprint that defines the graphic language for the entire deck.
+
+The image MUST demonstrate the core visual system without being divided into a grid of isolated rules. Instead, create a beautifully composed, unified slide background that includes:
+- A clean background with ambient lighting and subtle texture.
+- A subtle geometric motif (e.g., abstract beams, glowing nodes, or clean lines) that anchors the deck's identity.
+- Generous negative space for future content.
+- Elegant panel surfaces (rounded rectangular card/panel styles with thin borders and extremely light/subtle card fills or clean translucent white panels) floating in the composition.
+- Glowing spots or flares in the accent colors.
+
+# VISUAL STYLE & QUALITY
+- Background: Pure white (#FFFFFF) or extremely light clean off-white background with a very subtle soft light texture and elegant bright studio lighting.
+- Palette: Strictly use the colors defined in the global visual requirements (academic blue, warm coral, gold, cool gray, pure white).
+- Typography: All text labels must be short, uppercase, correctly spelled, and set in a clean, modern sans-serif font (like Inter or JetBrains Mono) in a dark, high-contrast color (like dark navy or dark slate). No long sentences or paragraphs.
+- Quality: Professional conference-keynote quality, high contrast, generous negative space, clean alignment, and sharp vector-like rendering.
+- NO cover titles, NO roadmap chips, NO diagrams, NO bullet lists, NO slide-specific layout.
+- This plate is the blank canvas all slide types inherit.
+"""
+
+        cover_prompt = f"""CREATE STYLE REFERENCE: CINEMATIC COVER / TITLE SLIDE
+Presentation Title: "{title}"
+Idea seed: {idea.strip()[:500]}
+{visual_requirements}
+Generate a cinematic, premium title-slide reference plate on a single 1920×1080 canvas. This plate defines the deck's opening impression and establishes the focal visual motif.
+
+# LAYOUT & COMPOSITION
+- Left-aligned typography in the upper-left or middle-left third of the screen in high-contrast dark navy or dark slate.
+- Large, bold main title: "{title}" (set in a clean, heavy sans-serif font like Inter Bold in deep navy or dark slate).
+- Subtitle below the title: A short, compelling subtitle in a smaller, lighter font weight (cool gray or academic blue).
+- Presenter line at the bottom-left: "PROF. XUEFENG CUI | SHANDONG UNIVERSITY" in a small, clean, uppercase monospaced font.
+- Right-aligned focal visual: A spectacular, abstract 3D-like geometric motif (e.g., a glowing concentric ring system, a radiating beam of particles, or a stylized network constellation) that represents "thought propagating into execution".
+- The focal visual must have a strong, elegant accent treatment (academic blue, warm coral, or gold) that contrasts beautifully against the white background.
+
+# VISUAL STYLE & CONTINUITY
+- Background: Match the EXACT pure white background treatment, lighting, and texture of the attached base plate reference image. Do not invent a new background.
+- Palette: Strictly use the colors defined in the global visual requirements (academic blue, warm coral, gold, cool gray, pure white).
+- Quality: Professional conference-keynote quality, generous negative space, clean alignment, and sharp vector-like rendering.
+- NO bullet text, NO paragraphs, NO decorative unreadable code, NO photorealistic human faces.
+"""
+
+        transition_prompt = f"""CREATE STYLE REFERENCE: TRANSITION / ROADMAP SLIDE
+Presentation: "{title}"
+{visual_requirements}
+Generate a section-divider and roadmap reference plate on a single 1920×1080 canvas. This plate defines the visual system for all section dividers and progress tracking in the deck.
+
+# LAYOUT & COMPOSITION
+- Upper section: Large, bold placeholder section title (e.g., "SECTION TITLE HERE") set in a clean sans-serif font in deep navy, with a short one-sentence placeholder description below in cool gray.
+- Middle/Lower section: A horizontal roadmap pipeline consisting of 3 to 5 rounded rectangular cards (roadmap chips) arranged in a clean, perfectly aligned row.
+- Each roadmap chip must have a short, uppercase placeholder label (2–3 words max, e.g., "01 / ESSENTIALS", "02 / ADVANCED", "03 / AGENTS").
+- Highlight exactly ONE chip (the current section) with a clean colored border and a subtle light background fill in the primary accent color (academic blue, warm coral, or gold).
+- The other chips must be subdued (thin borders, light gray, low opacity) but still clearly readable.
+- Progress indicator: A small, elegant progress marker (e.g., "ACT 1 OF 3" or a thin glowing progress bar, or "01 / 03") in the lower-right corner.
+
+# VISUAL STYLE & CONTINUITY
+- Background: Match the EXACT pure white background treatment, lighting, and texture of the attached base plate reference image. Do not invent a new background.
+- Palette: Strictly use the colors defined in the global visual requirements (academic blue, warm coral, gold, cool gray, pure white).
+- Quality: Professional conference-keynote quality, high contrast, generous negative space, clean alignment, and sharp vector-like rendering.
+- NO long sentences, NO dense text, NO background artwork competing with the roadmap chips.
+"""
+
+        content_prompt = f"""CREATE STYLE REFERENCE: CONTENT / TEACHING SLIDE
+Presentation: "{title}"
+{visual_requirements}
+Generate a content-slide reference plate on a single 1920×1080 canvas. This plate defines the visual system and split-screen layout for all content, teaching, and diagram slides in the deck.
+
+# LAYOUT & COMPOSITION
+- Split-screen layout divided into two main columns with generous spacing:
+  1. Primary Visual Area (55–65% width, left or right side): A beautifully designed, clear technical diagram, pipeline, or workflow.
+     - The diagram must consist of rounded-rectangle nodes with thin borders (dark navy or slate), connected by directional arrows with glowing joints or soft arrowheads.
+     - Each node and connector must have a short, uppercase, highly legible label.
+     - The visual composition must carry the narrative, making the slide's core concept understandable before reading any text.
+  2. Text Column (35–45% width, opposite side): A clean, well-spaced column of 4 to 5 short bullet points.
+     - Each bullet must start with a bold label in the accent color (e.g., "**LABEL:** brief placeholder text" in dark slate or navy).
+     - Use generic placeholder text to emphasize the layout structure rather than specific content.
+
+# VISUAL STYLE & CONTINUITY
+- Background: Match the EXACT pure white background treatment, lighting, and texture of the attached base plate reference image. Do not invent a new background.
+- Palette: Strictly use the colors defined in the global visual requirements (academic blue, warm coral, gold, cool gray, pure white).
+- Graphic Language: Use clean panel styles, consistent line weights, and elegant connector arrows that fit seamlessly with the base plate's aesthetic.
+- Quality: Professional conference-keynote quality, high contrast, generous negative space, clean alignment, and sharp vector-like rendering.
+"""
+
+    else:
+        # Dark theme prompts (default/fallback)
+        base_prompt = f"""CREATE STYLE REFERENCE: MASTER BACKGROUND & MOTIF PLATE
 Presentation topic: "{title}"
 Idea seed: {idea.strip()[:500]}
 {visual_requirements}
@@ -117,7 +214,7 @@ The image MUST demonstrate the core visual system without being divided into a g
 - This plate is the blank canvas all slide types inherit.
 """
 
-    cover_prompt = f"""CREATE STYLE REFERENCE: CINEMATIC COVER / TITLE SLIDE
+        cover_prompt = f"""CREATE STYLE REFERENCE: CINEMATIC COVER / TITLE SLIDE
 Presentation Title: "{title}"
 Idea seed: {idea.strip()[:500]}
 {visual_requirements}
@@ -138,7 +235,7 @@ Generate a cinematic, premium title-slide reference plate on a single 1920×1080
 - NO bullet text, NO paragraphs, NO decorative unreadable code, NO photorealistic human faces.
 """
 
-    transition_prompt = f"""CREATE STYLE REFERENCE: TRANSITION / ROADMAP SLIDE
+        transition_prompt = f"""CREATE STYLE REFERENCE: TRANSITION / ROADMAP SLIDE
 Presentation: "{title}"
 {visual_requirements}
 Generate a section-divider and roadmap reference plate on a single 1920×1080 canvas. This plate defines the visual system for all section dividers and progress tracking in the deck.
@@ -158,7 +255,7 @@ Generate a section-divider and roadmap reference plate on a single 1920×1080 ca
 - NO long sentences, NO dense text, NO background artwork competing with the roadmap chips.
 """
 
-    content_prompt = f"""CREATE STYLE REFERENCE: CONTENT / TEACHING SLIDE
+        content_prompt = f"""CREATE STYLE REFERENCE: CONTENT / TEACHING SLIDE
 Presentation: "{title}"
 {visual_requirements}
 Generate a content-slide reference plate on a single 1920×1080 canvas. This plate defines the visual system and split-screen layout for all content, teaching, and diagram slides in the deck.

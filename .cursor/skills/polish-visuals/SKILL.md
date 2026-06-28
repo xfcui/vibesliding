@@ -52,7 +52,7 @@ If a slide mentions or uses specific reference images (such as a presenter's hea
 
 - [ ] Explicitly declare them using a `[Reference: path/to/image.png]` or `[Refs: path/to/image.png]` tag.
 - [ ] Position the reference tag immediately before the slide's `[Visual:]` tag.
-- [ ] Verify that the referenced file exists in the workspace (e.g., `projects/ai4dd/cv/headshot.jpg`).
+- [ ] Verify that the referenced file exists in the workspace (e.g., `projects/cv/headshot.jpg`).
 - [ ] Ensure multiple references are separated by commas (e.g., `[Reference: path/1.png, path/2.jpg]`).
 
 #### C. Visual Tags (Art Direction)

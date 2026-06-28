@@ -17,6 +17,7 @@ IMAGE_DIR_PREFIX = "image_"
 OUTPUT_DIR_PREFIX = IMAGE_DIR_PREFIX
 PRESENTATION_SLIDES_PDF_PREFIX = "presentation_slides_"
 PRESENTATION_SPEECH_PDF_PREFIX = "presentation_speech_"
+PRESENTATION_VIDEO_PREFIX = "presentation_video_"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 
@@ -37,6 +38,10 @@ def presentation_speech_pdf_path(work_dir: Path, timestamp: str) -> Path:
     return work_dir / f"{PRESENTATION_SPEECH_PDF_PREFIX}{timestamp}.pdf"
 
 
+def presentation_video_path(work_dir: Path, timestamp: str) -> Path:
+    return work_dir / f"{PRESENTATION_VIDEO_PREFIX}{timestamp}.mp4"
+
+
 def timestamp_from_image_dir(path: Path) -> str | None:
     name = path.name
     if not name.startswith(IMAGE_DIR_PREFIX):
@@ -47,6 +52,19 @@ def timestamp_from_image_dir(path: Path) -> str | None:
 
 def outline_path_for_slides(work_dir: Path, slide_count: int) -> Path:
     return work_dir / OUTLINE_FILENAME_PATTERN.format(n=slide_count)
+
+
+def backup_outline_to_image_dir(
+    outline: Path,
+    output_dir: Path,
+    *,
+    text: str,
+) -> Path:
+    """Write an outline snapshot into a compose image output directory."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / outline.name
+    dest.write_text(text, encoding="utf-8")
+    return dest
 
 
 def read_nonempty_text(path: Path, *, label: str | None = None) -> str:

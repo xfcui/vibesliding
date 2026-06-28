@@ -30,12 +30,32 @@ SPEECH_TITLE_FONT_SIZE = 32
 SPEECH_BODY_FONT_SIZE = 24
 SPEECH_LABEL_FONT_SIZE = 20
 
-_FONT_CANDIDATES: tuple[str, ...] = (
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/Library/Fonts/Arial.ttf",
+_CJK_CHAR_PATTERN = re.compile(
+    r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3000-\u303f\uff00-\uffef]"
+)
+
+# CJK-capable fonts first so Chinese speech notes render correctly.
+_SPEECH_FONT_REGULAR: tuple[str, ...] = (
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/Songti.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/Library/Fonts/Arial.ttf",
+)
+
+_SPEECH_FONT_BOLD: tuple[str, ...] = (
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Bold.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    *_SPEECH_FONT_REGULAR,
 )
 
 
@@ -171,17 +191,95 @@ def save_style_reference_image(
 
 
 def _load_truetype_font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = _FONT_CANDIDATES
-    if bold:
-        candidates = tuple(
-            path for path in _FONT_CANDIDATES if "Bold" in path or "bold" in path
-        ) + tuple(path for path in _FONT_CANDIDATES if "Bold" not in path and "bold" not in path)
+    candidates = _SPEECH_FONT_BOLD if bold else _SPEECH_FONT_REGULAR
     for path in candidates:
         try:
             return ImageFont.truetype(path, size=size)
         except OSError:
             continue
     return ImageFont.load_default(size=size)
+
+
+def _line_width(
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    draw: ImageDraw.ImageDraw,
+) -> int:
+    if not text:
+        return 0
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
+
+
+def _needs_space_before(token: str, current: str) -> bool:
+    if not current:
+        return False
+    return not (
+        _CJK_CHAR_PATTERN.match(current[-1])
+        or _CJK_CHAR_PATTERN.match(token[0])
+    )
+
+
+def _append_wrap_token(current: str, token: str) -> str:
+    if not current:
+        return token
+    if _needs_space_before(token, current):
+        return f"{current} {token}"
+    return current + token
+
+
+def _iter_wrap_tokens(text: str):
+    """Yield wrap tokens, keeping Latin words intact and CJK as single characters."""
+    index = 0
+    length = len(text)
+    while index < length:
+        char = text[index]
+        if char.isspace():
+            index += 1
+            continue
+        if _CJK_CHAR_PATTERN.match(char):
+            yield char
+            index += 1
+            continue
+        match = re.match(r"[\w']+", text[index:])
+        if match:
+            yield match.group(0)
+            index += len(match.group(0))
+            continue
+        yield char
+        index += 1
+
+
+def _wrap_paragraph(
+    paragraph: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    max_width: int,
+    draw: ImageDraw.ImageDraw,
+) -> list[str]:
+    lines: list[str] = []
+    current = ""
+    for token in _iter_wrap_tokens(paragraph):
+        candidate = _append_wrap_token(current, token)
+        if _line_width(candidate, font, draw) <= max_width:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+            current = ""
+        if _line_width(token, font, draw) <= max_width:
+            current = token
+            continue
+        for char in token:
+            candidate = _append_wrap_token(current, char)
+            if _line_width(candidate, font, draw) <= max_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = char
+    if current:
+        lines.append(current)
+    return lines
 
 
 def _wrap_text_lines(
@@ -196,19 +294,7 @@ def _wrap_text_lines(
         if not paragraph:
             lines.append("")
             continue
-        words = paragraph.split()
-        current: list[str] = []
-        for word in words:
-            candidate = " ".join([*current, word]) if current else word
-            bbox = draw.textbbox((0, 0), candidate, font=font)
-            if bbox[2] - bbox[0] <= max_width:
-                current.append(word)
-            else:
-                if current:
-                    lines.append(" ".join(current))
-                current = [word]
-        if current:
-            lines.append(" ".join(current))
+        lines.extend(_wrap_paragraph(paragraph, font, max_width, draw))
     return lines or [""]
 
 

@@ -323,6 +323,9 @@ def test_compose_cli_first_slide_mode_mocked(
 
     assert result.exit_code == 0, result.output
     assert "first slide only" in result.output
+    assert "Outline backup:" in result.output
+    assert (out_dir / "outline_16.md").exists()
+    assert (out_dir / "outline_16.md").read_text(encoding="utf-8") == SAMPLE_OUTLINE
     assert "Done. Saved 1 image(s)" in result.output
 
 

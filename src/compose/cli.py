@@ -23,6 +23,7 @@ from src.core.export import rebuild_combined_pdf, rebuild_speech_pdf
 from src.core.paths import (
     DEFAULT_OUTLINE_PATH,
     DEFAULT_WORK_DIR,
+    backup_outline_to_image_dir,
     default_output_dir,
     timestamp_from_image_dir,
     timestamp_slug,
@@ -340,6 +341,7 @@ def _echo_generation_summary(
     article_texts: list[str],
     style_paths: list[Path] | None,
     output: Path,
+    outline_backup: Path,
     provider: str,
 ) -> None:
     info_parts = [f"Outline: {outline}", f"copy: {copy}"]
@@ -360,6 +362,7 @@ def _echo_generation_summary(
     if style_paths is None:
         output_str += " (first slide only)"
     info_parts.append(f"Output: {output_str}")
+    info_parts.append(f"Outline backup: {outline_backup.resolve()}")
     info_parts.append(f"Provider: {provider}")
     click.echo("  |  ".join(info_parts))
 
@@ -391,6 +394,11 @@ def _run_generation(
     page_numbers = _parse_page_spec_or_usage(page)
 
     outline_text = outline.read_text(encoding="utf-8")
+    outline_backup = backup_outline_to_image_dir(
+        outline,
+        out_dir,
+        text=outline_text,
+    )
     outline_article_patterns = extract_article_patterns_from_outline(outline_text)
     article_patterns = list(article or ()) + outline_article_patterns
 
@@ -412,6 +420,7 @@ def _run_generation(
         article_texts=article_texts,
         style_paths=style_paths,
         output=out_dir,
+        outline_backup=outline_backup,
         provider=config.provider,
     )
 

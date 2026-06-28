@@ -13,7 +13,9 @@ DEFAULT_CONFIG_PATH: Final[Path] = Path(".env")
 OPENROUTER_SECTION: Final[str] = "openrouter"
 VOLCENGINE_SECTION: Final[str] = "volcengine"
 VALYU_SECTION: Final[str] = "valyu"
+MINIMAX_SECTION: Final[str] = "minimax"
 Provider = Literal["openrouter", "volcengine"]
+TtsProvider = Literal["openrouter", "minimax"]
 DeepResearchMode = Literal["fast", "standard", "heavy", "max"]
 VALYU_DATASOURCE_CATEGORIES: Final[tuple[str, ...]] = (
     "research",
@@ -108,6 +110,17 @@ def _validate_valyu_categories(categories: tuple[str, ...]) -> None:
             f"Unknown Valyu datasource categories: {', '.join(unknown)}. "
             f"Valid categories: {valid}"
         )
+
+
+@dataclass
+class MiniMaxTtsConfig:
+    """Configuration for MiniMax TTS voice synthesis."""
+
+    api_key: str | None
+    tts_model: str
+    tts_voice: str
+
+    BASE_URL: str = "https://api.minimax.io/v1"
 
 
 @dataclass
@@ -246,6 +259,22 @@ def _load_valyu_from_parser(parser: ConfigParser) -> dict[str, str | None]:
         return out
     section = parser[VALYU_SECTION]
     for key in ("api_key", "mode", "categories", "use_proxy", "proxy"):
+        value = section.get(key, "").strip()
+        if value:
+            out[key] = value
+    return out
+
+
+def _load_minimax_from_parser(parser: ConfigParser) -> dict[str, str | None]:
+    out: dict[str, str | None] = {
+        "api_key": None,
+        "tts_model": None,
+        "tts_voice": None,
+    }
+    if not parser.has_section(MINIMAX_SECTION):
+        return out
+    section = parser[MINIMAX_SECTION]
+    for key in out:
         value = section.get(key, "").strip()
         if value:
             out[key] = value
@@ -694,4 +723,44 @@ def load_outline_config(
         proxy=proxy,
         max_concurrent=int(max_concurrent),
         valyu_proxy=valyu_proxy,
+    )
+
+
+DEFAULT_MINIMAX_TTS_MODEL: Final[str] = "speech-2.8-hd"
+DEFAULT_MINIMAX_TTS_VOICE: Final[str] = "Chinese (Mandarin)_Lyrical_Voice"
+
+
+def load_minimax_tts_config(
+    config_path: Path | None = None,
+    *,
+    api_key_override: str | None = None,
+    tts_model_override: str | None = None,
+    tts_voice_override: str | None = None,
+) -> MiniMaxTtsConfig:
+    """Load MiniMax TTS configuration from .env / env vars / CLI overrides."""
+    path = config_path or DEFAULT_CONFIG_PATH
+    parser = _parser_from_env_path(path)
+    mm = _load_minimax_from_parser(parser)
+
+    api_key = (
+        api_key_override
+        or os.getenv("MINIMAX_API_KEY")
+        or mm.get("api_key")
+    )
+    tts_model = (
+        tts_model_override
+        or os.getenv("MINIMAX_TTS_MODEL")
+        or mm.get("tts_model")
+        or DEFAULT_MINIMAX_TTS_MODEL
+    )
+    tts_voice = (
+        tts_voice_override
+        or os.getenv("MINIMAX_TTS_VOICE")
+        or mm.get("tts_voice")
+        or DEFAULT_MINIMAX_TTS_VOICE
+    )
+    return MiniMaxTtsConfig(
+        api_key=api_key,
+        tts_model=tts_model,
+        tts_voice=tts_voice,
     )
