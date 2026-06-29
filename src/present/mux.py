@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from src.narrate.segments import SlideSegment
+from src.present.segments import SlideSegment
 
 
 class FfmpegNotFoundError(RuntimeError):
@@ -219,7 +219,7 @@ def build_presentation_video(
     ffmpeg = resolve_ffmpeg()
     rendered: list[Path] = []
 
-    with tempfile.TemporaryDirectory(prefix="vibesliding_narrate_") as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix="vibesliding_present_") as tmp_dir:
         tmp = Path(tmp_dir)
         for index, segment in enumerate(segments):
             segment_path = tmp / f"segment_{index:04d}.mp4"

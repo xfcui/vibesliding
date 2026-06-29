@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from PIL import Image
 
-from src.compose.gen import SlideImageGenerator, resolve_reference_image_paths
+from src.render.gen import SlideImageGenerator, resolve_reference_image_paths
 from src.core.api_client import OpenRouterClient
 from src.outline.parser import Slide, extract_global_style
 

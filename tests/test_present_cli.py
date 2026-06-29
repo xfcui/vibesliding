@@ -9,7 +9,7 @@ import pytest
 from click.testing import CliRunner
 from PIL import Image
 
-from src.narrate.cli import main
+from src.present.cli import main
 
 OUTLINE = """# Deck
 
@@ -32,7 +32,7 @@ def image_dir(tmp_path: Path) -> Path:
 
 def test_narrate_mux_only(image_dir: Path, tmp_path: Path) -> None:
     runner = CliRunner()
-    with patch("src.narrate.cli.build_presentation_video", return_value=1) as mock_build:
+    with patch("src.present.cli.build_presentation_video", return_value=1) as mock_build:
         result = runner.invoke(
             main,
             [
@@ -51,7 +51,7 @@ def test_narrate_mux_only(image_dir: Path, tmp_path: Path) -> None:
 def test_narrate_success(image_dir: Path, tmp_path: Path) -> None:
     runner = CliRunner()
     with (
-        patch("src.narrate.cli.build_presentation_video", return_value=1) as mock_build,
+        patch("src.present.cli.build_presentation_video", return_value=1) as mock_build,
         patch("src.core.minimax_tts.synthesize_speech_parallel", return_value=[b"fake-mp3"]) as mock_synth,
     ):
         result = runner.invoke(
@@ -76,7 +76,7 @@ def test_narrate_with_reference_audio(image_dir: Path, tmp_path: Path) -> None:
     ref.write_bytes(b"RIFFfake")
     runner = CliRunner()
     with (
-        patch("src.narrate.cli.build_presentation_video", return_value=1) as mock_build,
+        patch("src.present.cli.build_presentation_video", return_value=1) as mock_build,
         patch("src.core.minimax_tts.setup_cloned_voice", return_value="cloned-voice-id") as mock_clone,
         patch("src.core.minimax_tts.synthesize_speech_parallel", return_value=[b"fake-mp3"]) as mock_synth,
     ):

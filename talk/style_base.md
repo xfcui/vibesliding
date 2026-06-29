@@ -120,7 +120,7 @@ PPT Outline: VibeSliding: From Idea to 60-Slide Deck in Under an Hour
 
 28. **Topic:** Try It Yourself — Three Steps to Your First VibeSlide Deck
     - **Priority:** CORE
-    - **Visual hook:** A terminal window showing three CLI commands (`research.cli`, `outline.cli`, `style.cli`, `compose.cli`) with output previews fanning out from each command, ending with a glowing PDF icon
+    - **Visual hook:** A terminal window showing three CLI commands (`research.cli`, `outline.cli`, `render.style.cli`, `render.cli`) with output previews fanning out from each command, ending with a glowing PDF icon
 
 29. **Topic:** Lessons Learned — What Broke, What Surprised, What We'd Change
     - **Priority:** EXTENDED

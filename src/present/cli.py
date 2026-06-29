@@ -1,4 +1,4 @@
-"""CLI entry point for narrated video export (`python -m src.narrate.cli`)."""
+"""CLI entry point for narrated video export (`python -m src.present.cli`)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 
-from src.compose.cli import parse_page_spec
+from src.render.cli import parse_page_spec
 from src.core.config import (
     DEFAULT_MINIMAX_TTS_MODEL,
     DEFAULT_MINIMAX_TTS_VOICE,
@@ -22,8 +22,8 @@ from src.core.paths import (
     timestamp_from_image_dir,
     timestamp_slug,
 )
-from src.narrate.mux import build_presentation_video
-from src.narrate.segments import collect_slide_segments
+from src.present.mux import build_presentation_video
+from src.present.segments import collect_slide_segments
 
 load_dotenv()
 
@@ -45,7 +45,7 @@ def _resolve_outline_path(image_dir: Path, outline_path: Path) -> Path:
 
     raise click.UsageError(
         f"Outline not found: {outline_path.resolve()}. "
-        "Pass --outline or ensure the compose output directory contains an outline snapshot."
+        "Pass --outline or ensure the render output directory contains an outline snapshot."
     )
 
 

@@ -157,11 +157,11 @@ def main(
 
     default_outline = outline_path_for_slides(work_dir, slide_counts[0])
     click.echo("")
-    click.echo("Review and edit the outlines, then generate style references:")
+    click.echo("Review and edit the outlines, then render style references:")
     if work_dir != DEFAULT_WORK_DIR:
-        click.echo(f"python3 -m src.style.cli --work {work_dir} --outline {default_outline}")
+        click.echo(f"python3 -m src.render.style.cli --work {work_dir} --outline {default_outline}")
     else:
-        click.echo(f"python3 -m src.style.cli --outline {default_outline}")
+        click.echo(f"python3 -m src.render.style.cli --outline {default_outline}")
 
 
 if __name__ == "__main__":

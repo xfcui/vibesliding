@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.style.refs import (
+from src.render.style.refs import (
     STYLE_BASE_FILENAME,
     STYLE_COVER_FILENAME,
     STYLE_CONTENT_FILENAME,

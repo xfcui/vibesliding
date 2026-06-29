@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 from click.testing import CliRunner
 
 from src.core.paths import IDEA_FILENAME
-from src.style.cli import build_style_selector, main, parse_pick_spec
+from src.render.style.cli import build_style_selector, main, parse_pick_spec
 
 VALID_OUTLINE = """# PPT Outline: Style CLI Test
 
@@ -44,16 +44,16 @@ def test_style_cli_generates_references_and_prints_compose_command(
     ]
 
     with (
-        patch("src.style.cli.load_dotenv"),
+        patch("src.render.style.cli.load_dotenv"),
         patch(
-            "src.style.cli.load_config",
+            "src.render.style.cli.load_config",
             return_value=SimpleNamespace(
                 validate=lambda: None,
             ),
         ),
-        patch("src.style.cli.create_image_client"),
+        patch("src.render.style.cli.create_image_client"),
         patch(
-            "src.style.cli.generate_style_references",
+            "src.render.style.cli.generate_style_references",
             new=AsyncMock(return_value=style_paths),
         ),
     ):
@@ -67,7 +67,7 @@ def test_style_cli_generates_references_and_prints_compose_command(
     assert "Generating style references" in result.output
     assert "style_base.png" in result.output
     assert "style_cover.png" in result.output
-    assert "python3 -m src.compose.cli --outline" in result.output
+    assert "python3 -m src.render.cli --outline" in result.output
     assert "style_*.png" in result.output
 
 
@@ -103,9 +103,9 @@ def test_parse_pick_spec_invalid_count() -> None:
         (work_dir / IDEA_FILENAME).write_text("idea", encoding="utf-8")
 
         with (
-            patch("src.style.cli.load_dotenv"),
+            patch("src.render.style.cli.load_dotenv"),
             patch(
-                "src.style.cli.load_config",
+                "src.render.style.cli.load_config",
                 return_value=SimpleNamespace(validate=lambda: None),
             ),
         ):
@@ -130,7 +130,7 @@ def test_build_style_selector_with_picks(tmp_path: Path) -> None:
 
 
 def test_build_style_selector_non_tty_defaults_to_first(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr("src.style.cli.sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("src.render.style.cli.sys.stdin.isatty", lambda: False)
     selector = build_style_selector(candidates=4, picks=None)
     choices = tmp_path / "style_cover_choices.png"
     choices.write_bytes(b"x")
@@ -159,14 +159,14 @@ def test_style_cli_generation_failure(tmp_path: Path) -> None:
     (work_dir / IDEA_FILENAME).write_text("idea", encoding="utf-8")
 
     with (
-        patch("src.style.cli.load_dotenv"),
+        patch("src.render.style.cli.load_dotenv"),
         patch(
-            "src.style.cli.load_config",
+            "src.render.style.cli.load_config",
             return_value=SimpleNamespace(validate=lambda: None),
         ),
-        patch("src.style.cli.create_image_client"),
+        patch("src.render.style.cli.create_image_client"),
         patch(
-            "src.style.cli.generate_style_references",
+            "src.render.style.cli.generate_style_references",
             new=AsyncMock(side_effect=RuntimeError("API down")),
         ),
     ):

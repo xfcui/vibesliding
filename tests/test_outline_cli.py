@@ -75,7 +75,7 @@ def test_outline_cli_writes_multiple_outlines(tmp_path: Path) -> None:
     assert outline_12.read_text(encoding="utf-8") == VALID_OUTLINE
     assert (work_dir / "style_base.md").is_file()
     assert "Saved shared style scaffold" in result.output
-    assert "python3 -m src.style.cli" in result.output
+    assert "python3 -m src.render.style.cli" in result.output
 
 
 def test_outline_cli_missing_research_file(tmp_path: Path) -> None:

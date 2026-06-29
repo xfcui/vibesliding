@@ -1,1 +1,1 @@
-"""Shared core modules used across research, outline, style, and compose."""
+"""Shared core modules used across research, outline, render, and present."""

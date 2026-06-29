@@ -10,7 +10,7 @@ from click.testing import CliRunner
 from src.core.api_client import OpenRouterClient
 from PIL import Image
 
-from src.compose.cli import (
+from src.render.cli import (
     main,
     parse_page_spec,
     expand_article_paths,
@@ -301,9 +301,9 @@ def test_compose_cli_first_slide_mode_mocked(
     b64 = base64.b64encode(mock_image_bytes).decode("ascii")
 
     with (
-        patch("src.compose.cli._resolve_style_paths", return_value=None),
+        patch("src.render.cli._resolve_style_paths", return_value=None),
         patch(
-            "src.compose.cli.SlideImageGenerator.generate_first_slide_images",
+            "src.render.cli.SlideImageGenerator.generate_first_slide_images",
             new=AsyncMock(return_value=[out_dir / "slide_p01_v01.png"]),
         ),
     ):
@@ -352,7 +352,7 @@ def test_compose_cli_all_slides_with_style_mocked(
     }
 
     with patch(
-        "src.compose.cli.SlideImageGenerator.generate_all_slide_images",
+        "src.render.cli.SlideImageGenerator.generate_all_slide_images",
         new=AsyncMock(return_value=saved),
     ):
         runner = CliRunner()
@@ -394,9 +394,9 @@ def test_compose_cli_loads_articles_from_outline_tag(tmp_path: Path, monkeypatch
     )
 
     with (
-        patch("src.compose.cli._resolve_style_paths", return_value=None),
+        patch("src.render.cli._resolve_style_paths", return_value=None),
         patch(
-            "src.compose.cli.SlideImageGenerator.generate_first_slide_images",
+            "src.render.cli.SlideImageGenerator.generate_first_slide_images",
             new=AsyncMock(return_value=[]),
         ),
     ):

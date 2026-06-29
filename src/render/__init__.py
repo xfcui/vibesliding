@@ -1,6 +1,7 @@
-"""Style reference generation: outline → cover/transition/content PNGs."""
+"""Render pipeline: style references + outline → slide images and PDF."""
 
-from src.style.refs import (
+from src.render.gen import SlideImageGenerator
+from src.render.style.refs import (
     STYLE_BASE_FILENAME,
     STYLE_CONTENT_FILENAME,
     STYLE_COVER_FILENAME,
@@ -13,6 +14,7 @@ from src.style.refs import (
 )
 
 __all__ = [
+    "SlideImageGenerator",
     "STYLE_BASE_FILENAME",
     "STYLE_CONTENT_FILENAME",
     "STYLE_COVER_FILENAME",

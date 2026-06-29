@@ -60,7 +60,7 @@ def backup_outline_to_image_dir(
     *,
     text: str,
 ) -> Path:
-    """Write an outline snapshot into a compose image output directory."""
+    """Write an outline snapshot into a render image output directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
     dest = output_dir / outline.name
     dest.write_text(text, encoding="utf-8")

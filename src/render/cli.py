@@ -1,4 +1,4 @@
-"""CLI entry point for slide image generation (`python -m src.compose.cli`)."""
+"""CLI entry point for slide image generation (`python -m src.render.cli`)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Final, cast
 import click
 from dotenv import load_dotenv
 
-from src.compose.gen import SlideImageGenerator
+from src.render.gen import SlideImageGenerator
 from src.core.api_client import OpenRouterClient
 from src.core.client_factory import (
     create_image_client,

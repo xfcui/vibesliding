@@ -201,7 +201,7 @@
 
 ## Slide 17: Step 6 — Style: Generate Candidates, User Picks
 
-- **Command:** `python3 -m src.style.cli --outline work/outline_36.md --pick 1,1,1,1` — generates 4 candidates for each of 4 template types (16 images total)
+- **Command:** `python3 -m src.render.style.cli --outline work/outline_36.md --pick 1,1,1,1` — generates 4 candidates for each of 4 template types (16 images total)
 - **The contact-sheet paradigm:** Borrowed from analog photography — review a grid of thumbnails, select the best frames; transforms subjective trial-and-error into a single confident selection step
 - **Four template types selected:** Base Plate v01 (centered heme porphyrin anchor), Cover v04 (cleanest typography hierarchy), Transition v04 (bold progress bar with section nodes), Content/Story v02 (horizontal pipeline with GOAL/METHOD/SIGNAL/RESULT sidebar)
 - **Cost of exploration:** 16 thumbnail variations cost ~$0.12 in API spend and render in under 90 seconds in parallel — far cheaper than generating a full deck, getting feedback, and re-generating
@@ -214,9 +214,9 @@
 
 ## Slide 18: Step 7 — Slides: Parallel Render, User Curates
 
-- **Command:** `python3 -m src.compose.cli --outline work/outline_36.md --style "work/style_*.png" --copy 4` — renders all 60 slides in parallel across 24 threads
+- **Command:** `python3 -m src.render.cli --outline work/outline_36.md --style "work/style_*.png" --copy 4` — renders all 60 slides in parallel across 24 threads
 - **Scale of generation:** 4 variant copies per slide × 60 slides = **168 PNGs total**; ~146 API calls (text, image, layout, script) executed across 12 concurrent workers in 8–12 minutes of raw generation
-- **User curation workflow:** Review variants in the editor → delete inferior copies → keep one per page; then `python3 -m src.compose.cli --pdf-only` to assemble the final PDF from the curated set
+- **User curation workflow:** Review variants in the editor → delete inferior copies → keep one per page; then `python3 -m src.render.cli --pdf-only` to assemble the final PDF from the curated set
 - **Why 4 copies, not 1:** Parallel generation is cheap (marginal cost per variant is minimal); human visual preference is hard to predict algorithmically; selection from candidates is faster than iterative revision of a single output
 - **Final output:** `slides_36.pdf` — 186 MB vectorized PDF with searchable text, full-resolution images, and presenter scripts embedded
 - Core insight: Generating four and picking one is faster and cheaper than generating one and revising it three times — parallel exploration beats serial refinement for aesthetic artifacts
@@ -285,12 +285,12 @@
 ## Slide 24: Try It Yourself — Three Steps to Your First VibeSlide Deck
 
 - **Step 1 — Write your idea:** One paragraph in `work/idea.md` — thesis, audience, focus areas, scope exclusions; 127 words is enough to start
-- **Step 2 — Run the pipeline:** `python3 -m src.research.cli` → `src.outline.cli` → `src.style.cli` → `src.compose.cli` — four commands, three tools, two principles
+- **Step 2 — Run the pipeline:** `python3 -m src.research.cli` → `src.outline.cli` → `src.render.style.cli` → `src.render.cli` — four commands, three tools, two principles
 - **Step 3 — Curate the output:** Review contact sheets, pick your styles, delete the slide copies you don't love, assemble the PDF — 28 minutes of decisions, not labor
 - **What you'll get:** A metric-dense, citation-rich, visually consistent deck with presenter scripts — at $4.73 and under 60 minutes
 - **The broader invitation:** Fork the pipeline, swap the models, adapt the scaffold to your domain — the architecture is open, no proprietary infrastructure required
 - Core insight: The best presentation you've never manually built is one `idea.md` away
-[Visual: A terminal window occupying the left two-thirds of the slide, showing four sequential CLI commands in JetBrains Mono with syntax highlighting: `research.cli`, `outline.cli`, `style.cli`, `compose.cli`. Each command has a small output preview fanning out to the right: research → citation list, outline → film strip, style → contact sheet grid, compose → slide thumbnails. These previews converge into a glowing PDF icon at the far right labeled "Your Deck." A "< 60 min" timer badge and "$4.73" cost badge float near the PDF icon. Warm White section accent. The visual echoes the cover slide's split-screen but now the journey is complete. Heme watermark upper-right. Slide number: 24/24.]
+[Visual: A terminal window occupying the left two-thirds of the slide, showing four sequential CLI commands in JetBrains Mono with syntax highlighting: `research.cli`, `outline.cli`, `render.style.cli`, `render.cli`. Each command has a small output preview fanning out to the right: research → citation list, outline → film strip, style → contact sheet grid, compose → slide thumbnails. These previews converge into a glowing PDF icon at the far right labeled "Your Deck." A "< 60 min" timer badge and "$4.73" cost badge float near the PDF icon. Warm White section accent. The visual echoes the cover slide's split-screen but now the journey is complete. Heme watermark upper-right. Slide number: 24/24.]
 [Speech: So here's your invitation. Step one: write a paragraph. Thesis, audience, focus areas. A hundred and twenty-seven words is plenty. Step two: run four commands. Research, outline, style, compose. Step three: curate. Pick your styles from the contact sheets, select your favorite slide variants, assemble the PDF. Twenty-eight minutes of your time, spent on decisions that matter. Four dollars and seventy-three cents. Under an hour. And the pipeline is open — no proprietary models, no closed infrastructure. Fork it, swap the models, adapt the scaffold to your domain. The best presentation you've never manually built is one idea.md away. Thank you.]
 
 ---

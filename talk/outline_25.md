@@ -211,7 +211,7 @@
 
 ## Slide 18: Step 6 — Style: Generate Candidates, User Picks
 
-- **Command:** `python3 -m src.style.cli --outline work/outline_36.md --pick 1,1,1,1` — generates 4 candidates for each of 4 template types (16 images total), collated into contact-sheet grids
+- **Command:** `python3 -m src.render.style.cli --outline work/outline_36.md --pick 1,1,1,1` — generates 4 candidates for each of 4 template types (16 images total), collated into contact-sheet grids
 - **The contact-sheet paradigm:** Borrowed from analog photography — a photographer reviews thumbnail prints to select the best frames from a roll of film; VibeSliding applies this to slide design systems
 - **Controlled variation axes:** Each candidate differs along color temperature, typography weight, image treatment (photographic vs. illustrative vs. abstract), and information density
 - **Cost and speed:** 16 style thumbnails cost ~$0.12 total and render in under 90 seconds in parallel — far cheaper than generating a full deck and iterating
@@ -237,11 +237,11 @@
 
 ## Slide 20: Step 7 — Slides: Parallel Render, User Curates
 
-- **Command:** `python3 -m src.compose.cli --outline work/outline_36.md --style "work/style_*.png" --copy 4` — renders all 60 slides in parallel across 24 threads
+- **Command:** `python3 -m src.render.cli --outline work/outline_36.md --style "work/style_*.png" --copy 4` — renders all 60 slides in parallel across 24 threads
 - **168 PNGs generated:** 4 variant copies per slide × 42 rendered slides — each variant uses the same content but differs in visual composition, image placement, and emphasis
 - **User curation workflow:** Review variants in the Cursor editor, delete inferior copies (typically 3 of 4), keep the best one per page
 - **Why parallel variants, not iterative revision?** Generating 4 options and selecting is faster and more satisfying than generating 1 and requesting 3 rounds of edits — it mirrors Midjourney's 4-image-per-prompt design
-- **Final assembly:** `python3 -m src.compose.cli --pdf-only` rebuilds the PDF from the curated set → `slides_36.pdf` (186 MB)
+- **Final assembly:** `python3 -m src.render.cli --pdf-only` rebuilds the PDF from the curated set → `slides_36.pdf` (186 MB)
 - Core insight: Selection from parallel options is faster, cheaper, and higher-satisfaction than sequential revision — the user curates rather than directs
 [Visual: A grid of 4 variant thumbnails for a single example slide, arranged in a 2×2 layout. Three thumbnails are grayed out with a red "×" overlay; one thumbnail (bottom-right) glows with a green "✓" and a Vivid Purple selection border. An arrow from the selected variant leads to a glowing PDF icon labeled "slides_36.pdf — 186 MB." Below, a small pipeline diagram shows: "60 slides × 4 variants = 240 renders → 24 parallel threads → 168 PNGs → user curation → 1 PDF." Heme watermark upper-right. Slide number 20/33. Reference style: style_content.png]
 [Speech: Now the full rendering engine fires. One command dispatches all sixty slides across twenty-four parallel threads, generating four variant copies of each — that's one hundred sixty-eight PNGs total. The user opens the Cursor editor, scrolls through the variants, and deletes the three they don't love. Keep one per page. This mirrors Midjourney's design philosophy: four images per prompt, pick your favorite. It's faster and more satisfying than the alternative of generating one slide and requesting three rounds of revisions. Once curation is done, one more command assembles the final PDF — one hundred eighty-six megabytes of publication-grade slides. The whole render-and-curate cycle took about twenty-five minutes. Let's talk about what happens when some of those slides aren't quite right.]
@@ -405,13 +405,13 @@
 - **Step 2 — Run the pipeline:** Four CLI commands in sequence:
   - `python3 -m src.research.cli` → generates `work/research.md`
   - `python3 -m src.outline.cli` → generates scaffold + `work/outline.md`
-  - `python3 -m src.style.cli --pick 1,1,1,1` → generates contact sheets, user selects
-  - `python3 -m src.compose.cli --copy 4` → renders parallel variants, user curates
+  - `python3 -m src.render.style.cli --pick 1,1,1,1` → generates contact sheets, user selects
+  - `python3 -m src.render.cli --copy 4` → renders parallel variants, user curates
 - **Step 3 — Curate the output:** Review contact sheets (2 min), pick your styles, scroll through slide variants, delete the copies you don't love, assemble the final PDF
 - **Total investment:** Under 60 minutes, under $5, zero PowerPoint, zero designers
 - **The pipeline is open:** No proprietary models, no closed infrastructure — three commodity platforms orchestrated by two principles
 - Core insight: The best presentation you've never manually built is one `idea.md` away
-[Visual: A terminal window on Deep Space background showing four CLI commands in JetBrains Mono 14pt, each on its own line with a faint output preview fanning out to the right: `research.cli` → a small research.md icon, `outline.cli` → a small outline document icon, `style.cli` → a small contact-sheet grid icon, `compose.cli` → a small slide variant grid icon. All four output icons converge via thin Amber arrows into a large glowing PDF icon at the far right, labeled "Your Deck." Below the terminal: "< 60 min · < $5 · 0 PowerPoint · 0 designers" in Signal Green. Heme watermark upper-right. Slide number 33/33. Reference style: style_content.png]
+[Visual: A terminal window on Deep Space background showing four CLI commands in JetBrains Mono 14pt, each on its own line with a faint output preview fanning out to the right: `research.cli` → a small research.md icon, `outline.cli` → a small outline document icon, `render.style.cli` → a small contact-sheet grid icon, `render.cli` → a small slide variant grid icon. All four output icons converge via thin Amber arrows into a large glowing PDF icon at the far right, labeled "Your Deck." Below the terminal: "< 60 min · < $5 · 0 PowerPoint · 0 designers" in Signal Green. Heme watermark upper-right. Slide number 33/33. Reference style: style_content.png]
 [Speech: Let me make this concrete. Step one: write one paragraph in idea-dot-md. Thesis, audience, key claims, scope exclusions. A hundred twenty-seven words is all it took for our sixty-slide deck. Step two: run four CLI commands. Research, outline, style, compose. The pipeline handles the iteration, the quality gates, the parallel rendering. Step three: curate. Pick your styles from the contact sheets — two minutes. Scroll through the slide variants and keep the ones you love. Assemble the PDF. Total: under sixty minutes, under five dollars, zero PowerPoint opened, zero designers pinged. The pipeline is completely open — no proprietary models, no closed infrastructure. Two principles, three tools, seven steps. The best presentation you've never manually built is one idea-dot-md away.]
 
 ---

@@ -1,4 +1,4 @@
-"""CLI entry point for style reference generation (`python -m src.style.cli`)."""
+"""CLI entry point for style reference generation (`python -m src.render.style.cli`)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from src.core.client_factory import create_image_client, normalize_provider, provider_label
 from src.core.config import load_config
 from src.core.paths import DEFAULT_OUTLINE_PATH, DEFAULT_WORK_DIR, IDEA_FILENAME, read_nonempty_text
-from src.style.refs import StyleSelectFn, generate_style_references
+from src.render.style.refs import StyleSelectFn, generate_style_references
 
 load_dotenv()
 
@@ -217,16 +217,16 @@ def main(
     style_glob = str(work_dir / "style_*.png")
     if work_dir != DEFAULT_WORK_DIR:
         next_cmd = (
-            f'python3 -m src.compose.cli --outline {outline_path} '
+            f'python3 -m src.render.cli --outline {outline_path} '
             f'--style "{style_glob}" --work {work_dir}'
         )
     else:
         next_cmd = (
-            f'python3 -m src.compose.cli --outline {outline_path} '
+            f'python3 -m src.render.cli --outline {outline_path} '
             f'--style "{style_glob}"'
         )
     click.echo("")
-    click.echo("Review style references, then compose slides:")
+    click.echo("Review style references, then render slides:")
     click.echo(next_cmd)
 
 

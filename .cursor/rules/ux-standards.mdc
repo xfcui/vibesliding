@@ -110,5 +110,5 @@ click.echo("Outline generated successfully!")
 click.echo(f"Saved outline to: {outline_path.resolve()}")
 click.echo("")
 click.echo("Review and edit the outline, then generate style references:")
-click.echo(f"python3 -m src.style.cli --outline {outline_path}")
+click.echo(f"python3 -m src.render.style.cli --outline {outline_path}")
 ```

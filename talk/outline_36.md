@@ -208,7 +208,7 @@
 
 ## Slide 18: Step 6 — Style: Generate Candidates, User Picks
 
-- **Command:** `python3 -m src.style.cli --outline work/outline_36.md --pick 1,1,1,1` — generates and presents style candidates for user selection
+- **Command:** `python3 -m src.render.style.cli --outline work/outline_36.md --pick 1,1,1,1` — generates and presents style candidates for user selection
 - **The Contact Sheet Paradigm:** Borrowed from analog photography — generate 4 candidates for each of 4 template types (16 images total), presented as a visual grid for rapid comparison
 - **Why Contact Sheets Work:** They externalize taste — making aesthetic preferences explicit and machine-readable rather than requiring iterative "try again, warmer" feedback loops
 - **Cost of Exploration:** 16 thumbnail variations cost ~$0.12 total API spend and render in under 90 seconds in parallel — cheaper than a single revision cycle
@@ -234,11 +234,11 @@
 
 ## Slide 20: Step 7 — Slides: Parallel Render, User Curates
 
-- **Command:** `python3 -m src.compose.cli --outline work/outline_36.md --style "work/style_*.png" --copy 4` — renders all 60 slides with 4 variants each
+- **Command:** `python3 -m src.render.cli --outline work/outline_36.md --style "work/style_*.png" --copy 4` — renders all 60 slides with 4 variants each
 - **Parallel Execution:** 24 concurrent threads dispatch ~150 API calls (text completion, image generation, layout rendering) — raw generation completes in 8–12 minutes
 - **Selection Pattern:** 4 variant copies per slide (168+ PNGs total); user reviews in the editor, deletes inferior copies, keeps one per page
 - **Why Parallel Variants?** The same content rendered with slightly different compositions, image placements, and text flows produces meaningful quality variance — the best copy is often non-obvious until you see all four
-- **Final Assembly:** `python3 -m src.compose.cli --pdf-only` rebuilds the curated set into a single vectorized PDF (text searchable, images at full resolution)
+- **Final Assembly:** `python3 -m src.render.cli --pdf-only` rebuilds the curated set into a single vectorized PDF (text searchable, images at full resolution)
 - Core insight: Generating four copies and letting the user delete three is faster and produces better results than generating one copy and iteratively revising it
 [Visual: A grid layout showing 4 variant thumbnails for a single slide (e.g., Slide 23 on P450Diffusion). Three variants are grayed out with semi-transparent "×" overlays. One variant glows with an Electric Cyan selection border and a "✓" checkmark. Below the grid, a miniature assembly pipeline: curated singles flowing into a funnel that outputs a single glowing PDF icon labeled "slides_36.pdf — 186 MB." CLI commands in JetBrains Mono at top and bottom. Stats: "24 threads · 168 PNGs · ~10 min render." Reference: style_content.png for composition. Pipeline thread line at bottom. 15/60.]
 [Speech: Step 7 is where the deck materializes. One command fires up twenty-four parallel threads, dispatching roughly a hundred and fifty API calls — text, images, and layout rendering. In eight to twelve minutes, we have a hundred and sixty-eight PNGs: four variant copies for every single slide. The user opens the editor and makes a simple judgment call for each page — which of these four is the best? Delete the other three. It sounds labor-intensive, but it's actually faster than the alternative. Generating one copy and iteratively revising requires you to articulate what's wrong and wait for regeneration. Generating four and picking the best? That's a visual scan. You know instantly. Once the curation is done, one more command assembles everything into a single vectorized PDF. Now let's look at what happens when not all slides pass muster on the first try.]
@@ -427,13 +427,13 @@
 - **Step 2 — Run the Pipeline:** Four CLI commands execute the full workflow:
   - `python3 -m src.research.cli` → generates `work/research.md` with citation-grounded findings
   - `python3 -m src.outline.cli` → generates `work/outline_36.md` with scaffold and slide-by-slide structure
-  - `python3 -m src.style.cli --pick 1,1,1,1` → generates style contact sheets, user selects templates
-  - `python3 -m src.compose.cli --copy 4` → renders parallel variants, assembles curated PDF
+  - `python3 -m src.render.style.cli --pick 1,1,1,1` → generates style contact sheets, user selects templates
+  - `python3 -m src.render.cli --copy 4` → renders parallel variants, assembles curated PDF
 - **Step 3 — Curate the Output:** Review contact sheets (2 min), pick styles, scan slide variants (15 min), delete inferior copies — your editorial judgment is the final quality filter
 - **Total Time Investment:** ~30 minutes of human attention spread across 57 minutes of wall-clock time
 - **Total Cost:** Under $5 in API credits for a 60-slide publication-grade deck
 - Core insight: The best presentation you've never manually built is one `idea.md` away
-[Visual: A terminal window on Deep Space background showing four CLI commands stacked vertically in JetBrains Mono 14pt Electric Cyan. Each command has a small output preview fanning out to the right: research.cli → research document icon, outline.cli → film strip icon, style.cli → contact sheet grid thumbnail, compose.cli → PDF icon with "186 MB" label. The four previews cascade diagonally from top-left to bottom-right, ending with the PDF glowing brightest. A "START HERE" badge points to a minimal `idea.md` file icon at the top-left. Stats at bottom: "~30 min human · < $5 · 60 slides." Pipeline thread line at bottom. 28/60.]
+[Visual: A terminal window on Deep Space background showing four CLI commands stacked vertically in JetBrains Mono 14pt Electric Cyan. Each command has a small output preview fanning out to the right: research.cli → research document icon, outline.cli → film strip icon, render.style.cli → contact sheet grid thumbnail, render.cli → PDF icon with "186 MB" label. The four previews cascade diagonally from top-left to bottom-right, ending with the PDF glowing brightest. A "START HERE" badge points to a minimal `idea.md` file icon at the top-left. Stats at bottom: "~30 min human · < $5 · 60 slides." Pipeline thread line at bottom. 28/60.]
 [Speech: You can do this yourself. Step one: write one paragraph in a markdown file. Describe your topic, your audience, your key claims. Step two: run four commands. Research, outline, style, compose. Each one produces a reviewable artifact. Step three: curate. Scan the contact sheets — two minutes. Review the slide variants — fifteen minutes. Delete the copies you don't love. That's it. Thirty minutes of your attention, under five dollars in API costs, and you have a sixty-slide publication-grade deck with custom visuals, verified metrics, and full presenter scripts. The pipeline is open. No proprietary models. No closed infrastructure. The best presentation you've never manually built is one idea.md away. Now let me share what we learned the hard way.]
 
 ---

@@ -8,14 +8,14 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 
-from src.narrate.mux import (
+from src.present.mux import (
     FfmpegNotFoundError,
     build_presentation_video,
     concat_video_segments,
     require_ffmpeg,
     render_slide_segment,
 )
-from src.narrate.segments import (
+from src.present.segments import (
     audio_path_for_image,
     collect_slide_segments,
 )
@@ -60,8 +60,8 @@ def test_collect_slide_segments_page_filter(tmp_path: Path) -> None:
 
 
 def test_require_ffmpeg_missing() -> None:
-    with patch("src.narrate.mux.shutil.which", return_value=None):
-        with patch("src.narrate.mux.resolve_ffmpeg", side_effect=FfmpegNotFoundError("ffmpeg")):
+    with patch("src.present.mux.shutil.which", return_value=None):
+        with patch("src.present.mux.resolve_ffmpeg", side_effect=FfmpegNotFoundError("ffmpeg")):
             with pytest.raises(FfmpegNotFoundError, match="ffmpeg"):
                 require_ffmpeg()
 
@@ -71,7 +71,7 @@ def test_render_slide_segment_invokes_ffmpeg(tmp_path: Path) -> None:
     Image.new("RGB", (64, 36), color="green").save(image_path)
     output_path = tmp_path / "segment.mp4"
 
-    with patch("src.narrate.mux.subprocess.run") as mock_run:
+    with patch("src.present.mux.subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
         render_slide_segment(
             "ffmpeg",
@@ -95,7 +95,7 @@ def test_concat_video_segments_invokes_ffmpeg(tmp_path: Path) -> None:
     seg2.write_bytes(b"fake")
     output_path = tmp_path / "out.mp4"
 
-    with patch("src.narrate.mux.subprocess.run") as mock_run:
+    with patch("src.present.mux.subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
         concat_video_segments("ffmpeg", [seg1, seg2], output_path)
 
@@ -112,9 +112,9 @@ def test_build_presentation_video(tmp_path: Path) -> None:
     output_path = tmp_path / "deck.mp4"
 
     with (
-        patch("src.narrate.mux.resolve_ffmpeg", return_value="ffmpeg"),
-        patch("src.narrate.mux.render_slide_segment") as mock_render,
-        patch("src.narrate.mux.concat_video_segments") as mock_concat,
+        patch("src.present.mux.resolve_ffmpeg", return_value="ffmpeg"),
+        patch("src.present.mux.render_slide_segment") as mock_render,
+        patch("src.present.mux.concat_video_segments") as mock_concat,
     ):
         count = build_presentation_video(segments, output_path, silent_seconds=3.0)
 

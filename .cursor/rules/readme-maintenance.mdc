@@ -21,8 +21,8 @@ alwaysApply: true
 4. Quick Start (2-3 commands max)
 5. Pipeline (numbered steps with bash block)
 6. Usage Examples (progressive complexity)
-7. CLI Reference (one table per module: `src.research.cli`, `src.outline.cli`, `src.style.cli`, `src.compose.cli`)
-8. Input/Output (work directory tree, outline format, compose output)
+7. CLI Reference (one table per module: `src.research.cli`, `src.outline.cli`, `src.render.style.cli`, `src.render.cli`, `src.present.cli`)
+8. Input/Output (work directory tree, outline format, render output)
 9. Configuration (`.env` section table + provider routing)
 10. License + friendly sign-off
 
