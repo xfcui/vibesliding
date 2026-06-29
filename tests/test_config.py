@@ -281,6 +281,52 @@ def test_load_outline_config_volcengine_txt_model_fallback(
     assert c.txt_model == "doubao-1-5-pro-32k-250115"
 
 
+def test_load_outline_config_minimax_txt_model_from_active_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_TXT_MODEL", raising=False)
+    monkeypatch.delenv("VOLCENGINE_TXT_MODEL", raising=False)
+    monkeypatch.delenv("MINIMAX_TXT_MODEL", raising=False)
+    env = tmp_path / ".env"
+    env.write_text(
+        "provider = volcengine\n"
+        "max_concurrent = 1\n\n"
+        "[openrouter]\napi_key = or\n"
+        "txt_model = openrouter-model\n"
+        "[volcengine]\napi_key = ve\n"
+        "txt_model = volcengine-model\n"
+        "[minimax]\napi_key = mm\n"
+        "txt_model = minimax-model\n"
+        "[valyu]\napi_key = v\n",
+        encoding="utf-8",
+    )
+    c = load_outline_config(config_path=env)
+    assert c.txt_model == "volcengine-model"
+
+
+def test_load_minimax_tts_config_reads_unified_section(tmp_path: Path) -> None:
+    from src.core.config import load_minimax_tts_config
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "provider = openrouter\n"
+        "max_concurrent = 1\n\n"
+        "[minimax]\n"
+        "api_key = mm-key\n"
+        "img_model = image-01\n"
+        "txt_model = MiniMax-M3\n"
+        "use_proxy = false\n"
+        "tts_model = speech-2.8-turbo\n"
+        "tts_voice = test-voice\n",
+        encoding="utf-8",
+    )
+    c = load_minimax_tts_config(config_path=env)
+    assert c.api_key == "mm-key"
+    assert c.tts_model == "speech-2.8-turbo"
+    assert c.tts_voice == "test-voice"
+
+
 def test_volcengine_missing_max_raises(tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text(

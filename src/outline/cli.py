@@ -71,7 +71,7 @@ def _parse_slide_counts(spec: str) -> list[int]:
     "--txt-model",
     "txt_model",
     default=None,
-    help="OpenRouter text model (or OPENROUTER_TXT_MODEL / [openrouter] txt_model).",
+    help="Text model (or OPENROUTER_TXT_MODEL / VOLCENGINE_TXT_MODEL / MINIMAX_TXT_MODEL / active provider [*_] txt_model).",
 )
 @click.option(
     "--proxy",

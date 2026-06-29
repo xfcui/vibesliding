@@ -152,9 +152,9 @@ class OutlineConfig:
             )
         if not self.txt_model or not self.txt_model.strip():
             raise ValueError(
-                "Text model is required. Set it in .env under [openrouter] txt_model "
-                "or [volcengine] txt_model, or via OPENROUTER_TXT_MODEL / "
-                "VOLCENGINE_TXT_MODEL env var."
+                "Text model is required. Set it in .env under the active provider "
+                "section ([openrouter], [volcengine], or [minimax] txt_model), or via "
+                "OPENROUTER_TXT_MODEL / VOLCENGINE_TXT_MODEL / MINIMAX_TXT_MODEL env var."
             )
         if self.max_concurrent < 1:
             raise ValueError(
@@ -268,6 +268,9 @@ def _load_valyu_from_parser(parser: ConfigParser) -> dict[str, str | None]:
 def _load_minimax_from_parser(parser: ConfigParser) -> dict[str, str | None]:
     out: dict[str, str | None] = {
         "api_key": None,
+        "img_model": None,
+        "txt_model": None,
+        "use_proxy": None,
         "tts_model": None,
         "tts_voice": None,
     }
@@ -658,8 +661,10 @@ def load_outline_config(
     parser = _parser_from_env_path(path)
     openrouter = _load_openrouter_from_parser(parser)
     volcengine = _load_volcengine_from_parser(parser)
+    minimax = _load_minimax_from_parser(parser)
     valyu = _load_valyu_from_parser(parser)
     default_mc = _default_max_concurrent(parser)
+    active_provider = _default_provider(parser) or "openrouter"
 
     valyu_api_key = _resolve_valyu_api_key(valyu_api_key_override, path)
     openrouter_api_key = _resolve_openrouter_api_key(openrouter_api_key_override, path)
@@ -668,12 +673,22 @@ def load_outline_config(
         raw = section.get("txt_model")
         return raw.strip() if isinstance(raw, str) and raw.strip() else ""
 
+    provider_sections: dict[str, dict[str, str | int | None] | dict[str, str | None]] = {
+        "openrouter": openrouter,
+        "volcengine": volcengine,
+        "minimax": minimax,
+    }
+    active_section = provider_sections.get(active_provider, openrouter)
+
     txt_model = (
         (txt_model_override or "").strip()
         or (os.getenv("OPENROUTER_TXT_MODEL") or "").strip()
         or (os.getenv("VOLCENGINE_TXT_MODEL") or "").strip()
+        or (os.getenv("MINIMAX_TXT_MODEL") or "").strip()
+        or _section_txt_model(active_section)
         or _section_txt_model(openrouter)
         or _section_txt_model(volcengine)
+        or _section_txt_model(minimax)
     )
 
     mode_raw = (

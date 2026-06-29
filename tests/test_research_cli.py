@@ -65,8 +65,15 @@ def test_research_cli_writes_work_dir_and_prints_next_command(tmp_path: Path) ->
 def test_research_cli_missing_idea_file(tmp_path: Path) -> None:
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    runner = CliRunner()
-    result = runner.invoke(main, ["--work", str(work_dir)])
+    with (
+        patch("src.research.cli.load_dotenv"),
+        patch(
+            "src.research.cli.load_outline_config",
+            return_value=_mock_research_config(),
+        ),
+    ):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--work", str(work_dir)])
     assert result.exit_code != 0
     assert "Idea file" in result.output
 

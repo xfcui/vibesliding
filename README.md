@@ -241,15 +241,16 @@ Copy `.env.example` → `.env` and fill in your keys. INI-style sections:
 | Section | Used by | Key settings |
 |---------|---------|-------------|
 | *(preamble)* | All | `provider`, `max_concurrent`, `proxy` |
-| `[valyu]` | Research | `api_key`, `mode`, `categories`, `use_proxy`, `proxy` |
-| `[openrouter]` | Outline / Render | `api_key`, `management_api_key`, `img_model`, `txt_model`, `use_proxy`, `proxy` |
-| `[volcengine]` | Render | `api_key`, `img_model`, `txt_model`, `base_url`, `image_size`, `response_format`, `watermark`, `use_proxy`, `proxy` |
-| `[minimax]` | Present | `api_key`, `tts_model`, `tts_voice` |
+| `[openrouter]` | Outline / Render (when `provider = openrouter`) | `api_key`, `management_api_key`, `img_model`, `txt_model`, `use_proxy` |
+| `[volcengine]` | Render (when `provider = volcengine`) | `api_key`, `img_model`, `txt_model`, `use_proxy` |
+| `[minimax]` | Present (+ future text/image) | `api_key`, `img_model`, `txt_model`, `use_proxy`, optional `tts_model`, `tts_voice` |
+| `[valyu]` | Research | `api_key`, `mode`, `categories`, `use_proxy` |
 
 - **Research** → `[valyu]` for DeepResearch
-- **Outline** → `txt_model` from `[openrouter]` (text only)
+- **Outline** → `txt_model` from the active `provider` section (falls back across `[openrouter]`, `[volcengine]`, `[minimax]`)
 - **Render** → `img_model` from the active `provider` (`src.render.style.cli` + `src.render.cli`)
-- **Present** → MiniMax TTS via `--tts-model` / `--voice` (defaults: `speech-2.8-hd`, `Chinese (Mandarin)_Lyrical_Voice`) with optional voice cloning
+- **Present** → MiniMax TTS via `[minimax]` `tts_model` / `tts_voice` or `--tts-model` / `--voice` (defaults: `speech-2.8-hd`, `Chinese (Mandarin)_Lyrical_Voice`) with optional voice cloning
+- Global `proxy` applies when a section's `use_proxy = true`; section-level `proxy` overrides are still supported
 - `ark_api_key` in the preamble aliases `[volcengine] api_key`
 
 ## License
