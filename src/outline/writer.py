@@ -7,22 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.core.api_client import OpenRouterClient
+from src.outline.parser import SLIDE_PREFIX_PATTERN
+from src.outline.roles import is_transition_slide
 
 OUTLINE_STANDARDS_PATH = Path(".cursor/rules/outline-standards.mdc")
 SLIDE_HEADER_PATTERN = re.compile(r"^## Slide \d+:", re.MULTILINE)
 
 MIN_TRANSITION_SLIDES = 3
 MAX_TRANSITION_SLIDES = 6
-# Transition slides are detectable by a "Roadmap:"-style title prefix or a
-# progress marker (e.g. "progress bar 6/29") in the slide body.
-TRANSITION_TITLE_PATTERN = re.compile(
-    r"^## Slide \d+:\s*(roadmap|transition|section|agenda|objectives)\b",
-    re.IGNORECASE,
-)
-PROGRESS_MARKER_PATTERN = re.compile(
-    r"progress bar\s*\d+\s*/\s*\d+|\bact\s+\d+\s+of\s+\d+\b",
-    re.IGNORECASE,
-)
 
 
 def count_transition_slides(outline: str) -> int:
@@ -35,7 +27,9 @@ def count_transition_slides(outline: str) -> int:
         end = slide_headers[index + 1].start() if index + 1 < len(slide_headers) else len(text)
         block = text[start:end]
         header_line = block.splitlines()[0] if block else ""
-        if TRANSITION_TITLE_PATTERN.match(header_line) or PROGRESS_MARKER_PATTERN.search(block):
+        title = SLIDE_PREFIX_PATTERN.sub("", header_line.lstrip("#").strip()).strip()
+        body = "\n".join(block.splitlines()[1:])
+        if is_transition_slide(title, body):
             count += 1
     return count
 
@@ -151,6 +145,7 @@ Every outline version inserts one transition/roadmap slide before each section (
 
 ### Shared Visual System
 Deck-wide art direction every version must reuse:
+- **Two-tone backgrounds (MANDATORY):** white/light backgrounds for content (teaching) slides; dark backgrounds for non-content slides (cover, transitions, ending) as a bold visual "curtain"
 - Cover and closing slide visual treatment — closing visually reconnects to the cover (same focal motif, rendered slightly larger to signal closure) and carries a clear take-home message
 - Transition/roadmap visual pattern (MANDATORY): one consistent section-map composition reused on all 3-6 transition slides, highlighting only the current section and showing a `progress bar N/total` marker
 - Diagram language (boxes, arrows, connectors, icons, glow rules)
@@ -158,7 +153,7 @@ Deck-wide art direction every version must reuse:
 
 ### Appendix: Global Visual Requirements
 The EXACT appendix block to copy verbatim into every outline version.
-Text-only: Theme (colors + hex), Fonts (families + sizes/weights), optional Format (16:9, margins).
+Text-only: Theme (accent colors + hex; state two-tone: light content backgrounds + dark curtain for cover/transitions/ending), Fonts (families + sizes/weights), optional Format (16:9, margins).
 Do NOT put layout or diagram rules here — those belong in Shared Visual System and per-slide `[Visual:]` tags.
 """
 
@@ -221,7 +216,7 @@ Expected total slide breakdown (in this order):
 - Content `[Visual:]` tags: name the focal object, a layout pattern (split-screen / grid / pipeline / roadmap / diagram), and a narrative device (contrast / sequence / before-after / cause-effect)
 - Content `[Speech:]` tags: 60-90 seconds; end each with a bridge sentence leading into the next slide
 - Closing slide: include a clear take-home message — the single idea the audience should remember
-- Reference style images in `[Visual:]` where appropriate: `style_base.png`, `style_cover.png`, `style_transition.png`, `style_content.png`
+- Reference style images in `[Visual:]` where appropriate: `style_base_noncontent.png` (dark curtain), `style_base_content.png` (light teaching), `style_cover.png`, `style_transition.png`, `style_content.png`
 - Reflect facts, case studies, and citations from the research accurately — prefer specific numbers over vague claims
 """
 

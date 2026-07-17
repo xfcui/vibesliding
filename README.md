@@ -12,10 +12,10 @@
 ## Features
 
 - 🧪 **DeepResearch** — Turn a one-line idea into a researched, reviewable outline via Valyu
-- 🎨 **Style Transfer** — Reference images for a consistent, on-brand deck
+- 🎨 **Two-Tone Style Transfer** — Dark curtain plates (cover/transition/ending) + light teaching plates (content), with shared accents/motifs
 - 🖼️ **Slide References** — Attach slide-specific photos or image globs in the outline
 - 📚 **Outline Articles** — Declare source markdown/PDF references once at the top
-- 🧠 **Smart Layouts** — AI auto-selects optimal layouts based on content
+- 🧠 **Role-Aware Render** — Routes each slide to the matching style plates by role (cover / transition / content / ending)
 - 🔄 **Multiple Variants** — Generate several design options per slide
 - 🎯 **Selective Regeneration** — Redo specific slides without starting over
 - ⚡ **Parallel Generation** — Concurrent API calls with configurable concurrency
@@ -41,8 +41,8 @@ python3 -m src.research.cli
 # 2. Outline: research.md → outline_16.md, outline_25.md, outline_36.md
 python3 -m src.outline.cli
 
-# 3. Render: style references → slide images + PDF
-python3 -m src.render.style.cli
+# 3. Render: two-tone style refs → slide images + PDF
+python3 -m src.render.style.cli   # base_noncontent → base_content → cover/transition/content
 python3 -m src.render.cli
 
 # 4. Present: slide PNGs + [Speech:] tags → narrated MP4 (requires ffmpeg)
@@ -51,14 +51,14 @@ python3 -m src.present.cli --output work/image_YYYYMMDD_HHMMSS
 
 Then **curate** (delete variants you don't love) and **polish** (`--page` to regenerate individual slides).
 
-> 💡 Steps 1–2 share `./work/` — edit files between steps. Render writes images to `work/image_YYYYMMDD_HHMMSS/` and PDFs to `work/`. Present writes `presentation_video_YYYYMMDD_HHMMSS.mp4` to `work/` (install [ffmpeg](https://ffmpeg.org/download.html) first).
+> 💡 Steps 1–2 share `./work/` — edit files between steps. Style CLI writes five plates (`style_base_noncontent.png`, `style_base_content.png`, `style_cover.png`, `style_transition.png`, `style_content.png`). Render routes plates by slide role and writes images to `work/image_YYYYMMDD_HHMMSS/` + PDFs to `work/`. Present writes `presentation_video_YYYYMMDD_HHMMSS.mp4` to `work/` (install [ffmpeg](https://ffmpeg.org/download.html) first).
 
 ## Usage Examples
 
 ```bash
 # Render: pick a different outline, or skip interactive style prompts
 python3 -m src.render.style.cli --outline work/outline_25.md
-python3 -m src.render.style.cli --pick 1,2,1,3
+python3 -m src.render.style.cli --pick 1,1,2,1,3  # base_noncontent,base_content,cover,transition,content
 
 # Render: multiple variants per slide
 python3 -m src.render.cli --copy 4
@@ -70,8 +70,8 @@ python3 -m src.render.cli --outline work/outline_36.md --page "1,3,5-7"
 python3 -m src.render.cli --pdf-only --output work/image_20260520_220006
 python3 -m src.render.cli --pdf-only --output work/image_20260520_220006 --variant 1
 
-# Render: explicit style files + article references
-python3 -m src.render.cli --style cover.png --style body.png --article "docs/*.pdf"
+# Render: explicit style plates + article references
+python3 -m src.render.cli --style "work/style_*.png" --article "docs/*.pdf"
 
 # Present: TTS + video from curated slides (MiniMax TTS)
 python3 -m src.present.cli --output work/image_20260520_220006 --variant 1
@@ -117,7 +117,7 @@ Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic
 | `--work` | Work directory (default: `work/`) |
 | `--outline` | Outline file (default: `work/outline_16.md`) |
 | `--candidates` | Candidates per stage (default: 4, max: 12) |
-| `--pick` | Pre-select indices: `base,cover,transition,content` |
+| `--pick` | Pre-select indices: `base_noncontent,base_content,cover,transition,content` |
 | `--provider` | `openrouter` or `volcengine` |
 | `--api-key` | API key override |
 | `--proxy` | HTTP/HTTPS proxy (OpenRouter only) |
@@ -178,10 +178,11 @@ work/
 ├── outline_16.md                              # 16 content-slide outline
 ├── outline_25.md                              # 25 content-slide outline
 ├── outline_36.md                              # 36 content-slide outline
-├── style_base.png                             # base plate (palette + typography)
-├── style_cover.png                            # cover-slide reference
-├── style_transition.png                       # transition/roadmap reference
-├── style_content.png                          # content-slide reference
+├── style_base_noncontent.png                  # dark curtain base (cover/transition/ending)
+├── style_base_content.png                     # light content base (teaching slides)
+├── style_cover.png                            # cover-slide reference (dark)
+├── style_transition.png                       # transition/roadmap reference (dark)
+├── style_content.png                          # content-slide reference (light)
 ├── style_candidates/                          # all candidates + contact sheets
 ├── image_YYYYMMDD_HHMMSS/                     # render output (slide PNGs)
 ├── presentation_slides_YYYYMMDD_HHMMSS.pdf    # combined slide deck
@@ -192,7 +193,7 @@ work/
 ### Outline Format
 
 ```markdown
-# My Presentation
+# PPT Outline: My Presentation
 
 [Articles: @docs/research.md, @docs/report.pdf]
 
@@ -200,24 +201,27 @@ work/
 
 ## Slide 1: Introduction
 - **Key point:** Why this matters
-[Visual: hero image of the product]
+- Core insight: One takeaway the audience should remember
 [Reference: photos/founder.png]
+[Visual: Split-screen hero; light content background; Reference style: style_content.png, style_base_content.png]
+[Speech: Conversational presenter narration for this slide]
 
 ---
 
 ## Appendix: Global Visual Requirements
-- **Theme:** Modern tech aesthetic
-- **Colors:** Primary: #2563EB, Accent: #10B981
+- **Theme:** Two-tone deck — white/light content slides; dark curtain for cover, transitions, ending. Accents: Primary #2563EB, Accent #10B981
+- **Fonts:** Title / body families and sizes
 ```
 
 | Tag | Purpose |
 |-----|---------|
-| `[Visual: ...]` | Layout, composition, diagrams, icons, motifs |
-| `[Reference: ...]` | Slide-specific image refs (leading `@` accepted) |
+| `[Visual: ...]` | Layout, composition, diagrams, icons, motifs; name the correct style plates for the slide role |
+| `[Speech: ...]` | Presenter narration (used by present + speech PDF) |
+| `[Reference: ...]` | Slide-specific image refs (place immediately before `[Visual:]`; leading `@` accepted) |
 | `[Articles: ...]` | Top-of-outline text reference declarations |
-| `## Appendix: ...` | Deck-wide text styles (colors + hex, fonts + sizes) |
+| `## Appendix: ...` | Deck-wide text constraints only (theme/hex, fonts/sizes; state two-tone backgrounds) |
 
-Include **3–6 transition slides** (titles prefixed `Roadmap:`) with `progress bar N/total` markers.
+Include **3–6 transition slides** (titles prefixed `Roadmap:`) with `progress bar N/total` markers. Render attaches dark plates to cover/transition/ending and light plates to content slides.
 
 ### Render Output
 

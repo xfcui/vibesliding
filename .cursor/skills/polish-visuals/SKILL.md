@@ -44,7 +44,7 @@ Apply in order. **Do not rewrite slides that are already strong** — preserve w
 - [ ] `## Appendix: Global Visual Requirements` is present after the last slide.
 - [ ] Every slide has exactly one `[Visual:]` tag.
 - [ ] Transition slides include a visual progress marker such as `progress bar N/total` in their `[Visual:]` tag.
-- [ ] Two-tone backgrounds: Content slides use the primary background color; non-content slides (cover, transitions, ending) use a slightly deeper/darker variant (~4–6 units darker in lightness) to create a visual "curtain" that distinguishes structural pauses from teaching slides.
+- [ ] Two-tone backgrounds: Content slides use a white/light background; non-content slides (cover, transitions, ending) use a dark background as a bold visual "curtain" that distinguishes structural pauses from teaching slides.
 
 #### B. Reference Image Tags
 
@@ -64,7 +64,7 @@ Ensure every slide's `[Visual:]` tag reads as **production-ready art direction**
 - [ ] Shows the **narrative visually** through contrast, sequence, hierarchy, cause/effect, before/after, or workflow movement.
 - [ ] Includes **concrete style cues**: specific hex colors from the appendix, font names and sizes, opacity percentages for watermarks/motifs.
 - [ ] Contains **slide number** in the format `Slide number: N/total` or `N/total` (content/transition slides only; not on cover/ending).
-- [ ] References style images where appropriate: `Reference style: style_base.png`, `style_cover.png`, `style_transition.png`, `style_content.png`.
+- [ ] References style images where appropriate: `Reference style: style_base_noncontent.png` (dark curtain), `style_base_content.png` (light teaching), `style_cover.png`, `style_transition.png`, `style_content.png`.
 - [ ] Transition slides reuse **one consistent section-map composition** with `progress bar N/total`, highlighting only the current section.
 - [ ] Cover and ending slides specify the same motif (e.g. "heme porphyrin ring emblem"), with ending rendered slightly larger to signal closure.
 - [ ] No dense generated-text labels, watermarks, fake logos, or AI-generation stamps.

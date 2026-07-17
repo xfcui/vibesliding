@@ -23,6 +23,8 @@ from src.core.paths import (
 )
 from src.core.resolve import PathResolveError, resolve_patterns
 from src.outline.parser import Slide, extract_global_style, parse_markdown
+from src.outline.roles import classify_slide_role
+from src.render.style.refs import select_style_paths_for_role
 
 # Constants
 CONTENT_PREVIEW_LENGTH: Final[int] = 200
@@ -205,11 +207,14 @@ class SlideImageGenerator:
             style_parts.append(
                 "\n# VISUAL STYLE REFERENCE (layout + graphics — strict adherence):\n"
                 "1. **Analyze**: Extract layout, composition, background treatment, graphic language, "
-                "diagram/connector style, icon treatment, and motif vocabulary from the reference images.\n"
-                "2. **Replicate**: Match that visual system precisely — same background, layout rhythm, "
-                "and graphic language.\n"
+                "diagram/connector style, icon treatment, and motif vocabulary from the reference images "
+                "attached for THIS slide type.\n"
+                "2. **Replicate**: Match that visual system precisely — same background tone, layout "
+                "rhythm, and graphic language. Content/teaching slides use white/light backgrounds; "
+                "cover, transition, and ending slides use the dark curtain background.\n"
                 "3. **Consistency**: The generated slide MUST look like it belongs in the same deck "
-                "as the references.\n"
+                "as the references (shared accents/motifs) while keeping the correct two-tone "
+                "background for its role.\n"
                 "4. **Adapt Content**: Keep the references' visual LOOK but replace all content "
                 "with the new slide's text, diagrams, and narrative."
             )
@@ -565,13 +570,22 @@ Render a single polished slide image. The visual composition must tell this slid
             f"max {self.client.max_concurrent} concurrent)..."
         )
 
-        ref_images = [path.read_bytes() for path in style_image_paths]
+        style_bytes_by_path = {path: path.read_bytes() for path in style_image_paths}
         outline_context = self._build_full_outline_context(slides)
         with_articles = bool(article_pdfs or article_texts)
 
         reference_summaries: list[str] = []
+        style_summaries: list[str] = []
         all_prompts: list[ImagePrompt] = []
-        for slide in slides:
+        total_slides = len(slides)
+        for position, slide in enumerate(slides):
+            role = classify_slide_role(slide, position=position, total=total_slides)
+            role_style_paths = select_style_paths_for_role(role, style_image_paths)
+            style_ref_images = [style_bytes_by_path[path] for path in role_style_paths]
+            style_summaries.append(
+                f"slide {slide.index} ({role}): "
+                + ", ".join(path.name for path in role_style_paths)
+            )
             slide_reference_paths = resolve_reference_image_paths(slide, outline_dir)
             if slide_reference_paths:
                 reference_summaries.append(
@@ -585,8 +599,8 @@ Render a single polished slide image. The visual composition must tell this slid
                     global_style=global_style,
                     with_style_reference=True,
                     with_articles=with_articles,
-                    style_ref_images=ref_images,
-                    style_reference_count=len(ref_images),
+                    style_ref_images=style_ref_images,
+                    style_reference_count=len(style_ref_images),
                     outline_dir=outline_dir,
                     article_pdfs=article_pdfs,
                     article_texts=article_texts,
@@ -594,6 +608,7 @@ Render a single polished slide image. The visual composition must tell this slid
                 )
             )
 
+        print("Style plates by slide role: " + "; ".join(style_summaries))
         if reference_summaries:
             print("Using slide reference(s): " + "; ".join(reference_summaries))
 

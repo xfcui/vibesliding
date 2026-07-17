@@ -37,7 +37,8 @@ def test_style_cli_generates_references_and_prints_compose_command(
     (work_dir / IDEA_FILENAME).write_text("Future of AI coding", encoding="utf-8")
 
     style_paths = [
-        work_dir / "style_base.png",
+        work_dir / "style_base_noncontent.png",
+        work_dir / "style_base_content.png",
         work_dir / "style_cover.png",
         work_dir / "style_transition.png",
         work_dir / "style_content.png",
@@ -60,12 +61,20 @@ def test_style_cli_generates_references_and_prints_compose_command(
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["--work", str(work_dir), "--outline", str(outline_path), "--pick", "1,1,1,1"],
+            [
+                "--work",
+                str(work_dir),
+                "--outline",
+                str(outline_path),
+                "--pick",
+                "1,1,1,1,1",
+            ],
         )
 
     assert result.exit_code == 0, result.output
-    assert "Generating style references" in result.output
-    assert "style_base.png" in result.output
+    assert "Generating two-tone style references" in result.output
+    assert "style_base_noncontent.png" in result.output
+    assert "style_base_content.png" in result.output
     assert "style_cover.png" in result.output
     assert "python3 -m src.render.cli --outline" in result.output
     assert "style_*.png" in result.output
@@ -85,12 +94,13 @@ def test_style_cli_missing_outline(tmp_path: Path) -> None:
 
 
 def test_parse_pick_spec() -> None:
-    picks = parse_pick_spec("2,1,3,4", candidates=4)
+    picks = parse_pick_spec("2,1,3,4,1", candidates=4)
     assert picks == {
-        "base": 2,
-        "cover": 1,
-        "transition": 3,
-        "content": 4,
+        "base_noncontent": 2,
+        "base_content": 1,
+        "cover": 3,
+        "transition": 4,
+        "content": 1,
     }
 
 
@@ -114,16 +124,23 @@ def test_parse_pick_spec_invalid_count() -> None:
                 ["--work", str(work_dir), "--pick", "1,2,3"],
             )
     assert result.exit_code != 0
-    assert "four comma-separated indices" in result.output
+    assert "five comma-separated indices" in result.output
 
 
 def test_build_style_selector_with_picks(tmp_path: Path) -> None:
-    picks = {"base": 2, "cover": 1, "transition": 3, "content": 4}
+    picks = {
+        "base_noncontent": 2,
+        "base_content": 1,
+        "cover": 1,
+        "transition": 3,
+        "content": 4,
+    }
     selector = build_style_selector(candidates=4, picks=picks)
-    choices = tmp_path / "style_base_choices.png"
+    choices = tmp_path / "style_base_noncontent_choices.png"
     choices.write_bytes(b"x")
 
-    assert selector("base", choices, 4) == 2
+    assert selector("base_noncontent", choices, 4) == 2
+    assert selector("base_content", choices, 4) == 1
     assert selector("cover", choices, 4) == 1
     assert selector("transition", choices, 4) == 3
     assert selector("content", choices, 4) == 4
@@ -173,7 +190,14 @@ def test_style_cli_generation_failure(tmp_path: Path) -> None:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["--work", str(work_dir), "--outline", str(outline_path), "--pick", "1,1,1,1"],
+            [
+                "--work",
+                str(work_dir),
+                "--outline",
+                str(outline_path),
+                "--pick",
+                "1,1,1,1,1",
+            ],
         )
 
     assert result.exit_code != 0
