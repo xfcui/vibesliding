@@ -8,6 +8,7 @@ from src.core.export import (
     collect_slide_image_paths,
     create_pdf_from_images,
     create_speech_pdf,
+    first_slide_image_paths,
     rebuild_combined_pdf,
     rebuild_speech_pdf,
     render_speech_page,
@@ -78,6 +79,22 @@ def test_collect_slide_image_paths_empty_raises(tmp_path):
         collect_slide_image_paths(tmp_path)
 
 
+def test_first_slide_image_paths_picks_lowest_variant(tmp_path):
+    for name in (
+        "slide_p02_v02.png",
+        "slide_p01_v02.png",
+        "slide_p01_v01.png",
+        "slide_p02_v01.png",
+        "notes.txt",
+    ):
+        (tmp_path / name).write_bytes(b"x")
+
+    assert [p.name for p in first_slide_image_paths(list(tmp_path.iterdir()))] == [
+        "slide_p01_v01.png",
+        "slide_p02_v01.png",
+    ]
+
+
 def test_rebuild_combined_pdf(tmp_path):
     image_dir = tmp_path / "image_test"
     image_dir.mkdir()
@@ -110,11 +127,16 @@ def test_create_speech_pdf(tmp_path):
 """
     img = Image.new("RGB", (320, 180), color="red")
     img.save(tmp_path / "slide_p01_v01.png")
+    img.save(tmp_path / "slide_p01_v02.png")
     img.save(tmp_path / "slide_p02_v01.png")
 
     pdf_path = tmp_path / "presentation_speech.pdf"
     create_speech_pdf(
-        [tmp_path / "slide_p01_v01.png", tmp_path / "slide_p02_v01.png"],
+        [
+            tmp_path / "slide_p01_v01.png",
+            tmp_path / "slide_p01_v02.png",
+            tmp_path / "slide_p02_v01.png",
+        ],
         slides_by_index_from_outline(outline),
         pdf_path,
     )
@@ -129,15 +151,21 @@ def test_rebuild_speech_pdf(tmp_path):
 
 ## Slide 1: Cover
 [Speech: Hello.]
+
+---
+
+## Slide 2: Body
+[Speech: Next.]
 """
     image_dir = tmp_path / "image_test"
     image_dir.mkdir()
-    Image.new("RGB", (80, 45), color="green").save(image_dir / "slide_p01_v01.png")
+    for name in ("slide_p01_v01.png", "slide_p01_v02.png", "slide_p02_v01.png"):
+        Image.new("RGB", (80, 45), color="green").save(image_dir / name)
 
     pdf_path, count = rebuild_speech_pdf(
         image_dir, outline, pdf_dir=tmp_path, timestamp="test"
     )
-    assert count == 1
+    assert count == 2
     assert pdf_path == tmp_path / "presentation_speech_test.pdf"
     assert pdf_path.exists()
 

@@ -25,6 +25,7 @@ from src.core.paths import (
     DEFAULT_WORK_DIR,
     backup_outline_to_image_dir,
     default_output_dir,
+    default_style_glob,
     timestamp_from_image_dir,
     timestamp_slug,
 )
@@ -261,7 +262,6 @@ def _run_pdf_only(
             pdf_dir=work_dir,
             timestamp=ts,
             page_filter=page_numbers,
-            variant_filter=variant_numbers,
         )
     except Exception as exc:
         raise click.ClickException(f"Failed to rebuild speech PDF: {exc}") from exc
@@ -326,7 +326,7 @@ def _resolve_style_paths(
     style: tuple[str, ...],
     work_dir: Path,
 ) -> list[Path] | None:
-    patterns = list(style) if style else [str(work_dir / "style_*.png")]
+    patterns = list(style) if style else [default_style_glob()]
     style_paths = expand_style_paths(patterns)
     return style_paths or None
 
@@ -501,7 +501,7 @@ def _run_generation(
     default=(),
     help=(
         "Style reference image path(s) or glob; repeatable "
-        '(default: work/style_*.png). If no images resolve, only the first slide is generated.'
+        "(default: style/*.png). If no images resolve, only the first slide is generated."
     ),
 )
 @click.option(
@@ -566,7 +566,7 @@ def _run_generation(
     help=(
         "Rebuild presentation_slides_*.pdf and presentation_speech_*.pdf in --work from "
         "existing slide_p##_v##.png files in --output (no API calls). "
-        "Speech PDF uses --outline when available."
+        "Speech PDF uses --outline when available and always the first variant per slide."
     ),
 )
 @click.option(
@@ -574,8 +574,9 @@ def _run_generation(
     type=str,
     default=None,
     help=(
-        "With --pdf-only: include only these variant numbers "
-        "(e.g. '1' or '1,2'). Default: all variants present in --output."
+        "With --pdf-only: include only these variant numbers in presentation_slides PDF "
+        "(e.g. '1' or '1,2'). Default: all variants present in --output. "
+        "Does not affect presentation_speech PDF (always first variant per slide)."
     ),
 )
 def main(

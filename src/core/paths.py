@@ -13,12 +13,25 @@ RESEARCH_STATE_FILENAME = "research_state.json"
 IDEA_FILENAME = "idea.md"
 SOURCE_FILENAME = "source.md"
 OUTLINE_FILENAME_PATTERN = "outline_{n}.md"
+STYLE_DIRNAME = "style"
+DEFAULT_STYLE_DIR = Path(STYLE_DIRNAME)
+STYLE_GLOB = "*.png"
 IMAGE_DIR_PREFIX = "image_"
 OUTPUT_DIR_PREFIX = IMAGE_DIR_PREFIX
 PRESENTATION_SLIDES_PDF_PREFIX = "presentation_slides_"
 PRESENTATION_SPEECH_PDF_PREFIX = "presentation_speech_"
 PRESENTATION_VIDEO_PREFIX = "presentation_video_"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
+
+def style_dir() -> Path:
+    """Directory for style-reference plates (`style/` at the project root)."""
+    return DEFAULT_STYLE_DIR
+
+
+def default_style_glob() -> str:
+    """Default style-image glob (`style/*.png`)."""
+    return str(style_dir() / STYLE_GLOB)
 
 
 def timestamp_slug() -> str:

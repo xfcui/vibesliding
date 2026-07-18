@@ -9,14 +9,17 @@ import pytest
 from src.core.paths import (
     DEFAULT_IDEA_PATH,
     DEFAULT_OUTLINE_PATH,
+    DEFAULT_STYLE_DIR,
     DEFAULT_WORK_DIR,
     IMAGE_DIR_PREFIX,
     backup_outline_to_image_dir,
     default_output_dir,
+    default_style_glob,
     outline_path_for_slides,
     presentation_slides_pdf_path,
     presentation_video_path,
     read_nonempty_text,
+    style_dir,
 )
 
 
@@ -33,6 +36,11 @@ def test_default_output_dir_prefix() -> None:
     path = default_output_dir()
     assert path.parent == DEFAULT_WORK_DIR
     assert path.name.startswith(IMAGE_DIR_PREFIX)
+
+
+def test_style_dir_and_default_style_glob() -> None:
+    assert style_dir() == DEFAULT_STYLE_DIR == Path("style")
+    assert default_style_glob() == "style/*.png"
 
 
 def test_presentation_slides_pdf_path() -> None:

@@ -16,6 +16,7 @@ from src.render.cli import (
     expand_article_paths,
     expand_style_paths,
     extract_article_patterns_from_outline,
+    _resolve_style_paths,
 )
 
 SAMPLE_OUTLINE = """# PPT Outline: Compose CLI Test
@@ -123,6 +124,24 @@ def test_expand_style_paths_glob_sorted(tmp_path):
     pattern = str(tmp_path / "style_*.png")
     got = expand_style_paths([pattern])
     assert [p.name for p in got] == ["style_alpha.png", "style_zebra.png"]
+
+
+def test_resolve_style_paths_defaults_to_project_style_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    style = tmp_path / "style"
+    style.mkdir()
+    (style / "style_cover.png").write_bytes(b"c")
+    (style / "style_content.png").write_bytes(b"t")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "style_cover.png").write_bytes(b"old")
+
+    got = _resolve_style_paths((), work)
+    assert got is not None
+    assert [p.name for p in got] == ["style_content.png", "style_cover.png"]
+    assert all(p.resolve().parent == style.resolve() for p in got)
 
 
 def test_expand_style_paths_duplicate_glob_same_file(tmp_path):

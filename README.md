@@ -51,7 +51,7 @@ python3 -m src.present.cli --output work/image_YYYYMMDD_HHMMSS
 
 Then **curate** (delete variants you don't love) and **polish** (`--page` to regenerate individual slides).
 
-> 💡 Steps 1–2 share `./work/` — edit files between steps. Style CLI writes five plates (`style_base_noncontent.png`, `style_base_content.png`, `style_cover.png`, `style_transition.png`, `style_content.png`). Render routes plates by slide role and writes images to `work/image_YYYYMMDD_HHMMSS/` + PDFs to `work/`. Present writes `presentation_video_YYYYMMDD_HHMMSS.mp4` to `work/` (install [ffmpeg](https://ffmpeg.org/download.html) first).
+> 💡 Steps 1–2 share `./work/` — edit files between steps. Style CLI writes five plates under `style/` (`style_base_noncontent.png`, `style_base_content.png`, `style_cover.png`, `style_transition.png`, `style_content.png`). Render routes plates by slide role and writes images to `work/image_YYYYMMDD_HHMMSS/` + PDFs to `work/`. Present writes `presentation_video_YYYYMMDD_HHMMSS.mp4` to `work/` (install [ffmpeg](https://ffmpeg.org/download.html) first).
 
 ## Usage Examples
 
@@ -71,7 +71,7 @@ python3 -m src.render.cli --pdf-only --output work/image_20260520_220006
 python3 -m src.render.cli --pdf-only --output work/image_20260520_220006 --variant 1
 
 # Render: explicit style plates + article references
-python3 -m src.render.cli --style "work/style_*.png" --article "docs/*.pdf"
+python3 -m src.render.cli --style "style/*.png" --article "docs/*.pdf"
 
 # Present: TTS + video from curated slides (MiniMax TTS)
 python3 -m src.present.cli --output work/image_20260520_220006 --variant 1
@@ -128,7 +128,7 @@ Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic
 |--------|-------------|
 | `--work` | Work directory (default: `work/`) |
 | `--outline` | Outline file (default: `work/outline_16.md`) |
-| `--style` | Style image(s)/glob, repeatable (default: `work/style_*.png`) |
+| `--style` | Style image(s)/glob, repeatable (default: `style/*.png`) |
 | `--copy` | Variants per slide (default: 1) |
 | `--page` | Pages to generate, e.g. `1,3,5-7` |
 | `--article` | Article path(s)/glob, repeatable (`.pdf`, `.md`) |
@@ -138,8 +138,8 @@ Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic
 | `--proxy` | HTTP/HTTPS proxy (OpenRouter only) |
 | `--balance-only` | Print OpenRouter credits and exit |
 | `--no-balance` | Skip credits line after run |
-| `--pdf-only` | Rebuild PDFs from existing PNGs in `--output` dir (no API calls) |
-| `--variant` | With `--pdf-only`: variant filter, e.g. `1` or `1,2` |
+| `--pdf-only` | Rebuild PDFs from existing PNGs in `--output` dir (no API calls); speech PDF always uses first variant per slide |
+| `--variant` | With `--pdf-only`: variant filter for slides PDF only, e.g. `1` or `1,2` |
 
 > **Credits:** After each OpenRouter run, remaining credits are printed unless `--no-balance`. Requires an OpenRouter [Management API key](https://openrouter.ai/settings/management-keys) — set `OPENROUTER_MANAGEMENT_API_KEY` or `[openrouter] management_api_key` in `.env`.
 
@@ -169,6 +169,13 @@ Categories: `research`, `healthcare`, `patents`, `markets`, `company`, `economic
 ### Work Directory
 
 ```
+style/                                         # style-reference plates (default --style glob)
+├── style_base_noncontent.png                  # dark curtain base (cover/transition/ending)
+├── style_base_content.png                     # light content base (teaching slides)
+├── style_cover.png                            # cover-slide reference (dark)
+├── style_transition.png                       # transition/roadmap reference (dark)
+├── style_content.png                          # content-slide reference (light)
+└── style_candidates/                          # all candidates + contact sheets
 work/
 ├── idea.md                                    # seed: title, audience, core message
 ├── research.md                                # DeepResearch report with citations
@@ -178,15 +185,9 @@ work/
 ├── outline_16.md                              # 16 content-slide outline
 ├── outline_25.md                              # 25 content-slide outline
 ├── outline_36.md                              # 36 content-slide outline
-├── style_base_noncontent.png                  # dark curtain base (cover/transition/ending)
-├── style_base_content.png                     # light content base (teaching slides)
-├── style_cover.png                            # cover-slide reference (dark)
-├── style_transition.png                       # transition/roadmap reference (dark)
-├── style_content.png                          # content-slide reference (light)
-├── style_candidates/                          # all candidates + contact sheets
 ├── image_YYYYMMDD_HHMMSS/                     # render output (slide PNGs)
 ├── presentation_slides_YYYYMMDD_HHMMSS.pdf    # combined slide deck
-├── presentation_speech_YYYYMMDD_HHMMSS.pdf    # A4: slide image + speech notes
+├── presentation_speech_YYYYMMDD_HHMMSS.pdf    # A4: first image per slide + speech notes
 └── presentation_video_YYYYMMDD_HHMMSS.mp4       # narrated slide video
 ```
 
@@ -234,7 +235,7 @@ work/
 │   ├── slide_p01_v02.png              # Slide 1, variant 2
 │   └── slide_p02_v01.png              # Slide 2, variant 1
 ├── presentation_slides_YYYYMMDD_HHMMSS.pdf   # all slides in one PDF
-├── presentation_speech_YYYYMMDD_HHMMSS.pdf   # A4: slide image + speech notes
+├── presentation_speech_YYYYMMDD_HHMMSS.pdf   # A4: first image per slide + speech notes
 └── presentation_video_YYYYMMDD_HHMMSS.mp4    # narrated MP4
 ```
 

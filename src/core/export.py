@@ -414,12 +414,36 @@ def render_speech_page(
     return page
 
 
+def first_slide_image_paths(image_paths: list[Path]) -> list[Path]:
+    """Return the first variant image for each slide page, in page order.
+
+    ``slide_p##_v##.png`` files are grouped by page number; the lowest variant
+    number for each page is kept. Paths that do not match the slide naming
+    pattern are ignored.
+    """
+    by_page: dict[int, tuple[int, Path]] = {}
+    for path in image_paths:
+        match = SLIDE_IMAGE_PATTERN.match(path.name)
+        if not match:
+            continue
+        page_num = int(match.group(1))
+        variant_num = int(match.group(2))
+        existing = by_page.get(page_num)
+        if existing is None or variant_num < existing[0]:
+            by_page[page_num] = (variant_num, path)
+    return [by_page[page][1] for page in sorted(by_page)]
+
+
 def create_speech_pdf(
     image_paths: list[Path],
     slides_by_index: dict[int, Slide],
     output_path: Path,
 ) -> None:
-    """Combine slide images and speech notes into one A4 PDF (one slide per page)."""
+    """Combine slide images and speech notes into one A4 PDF (one slide per page).
+
+    Always uses the first image variant for each slide page.
+    """
+    image_paths = first_slide_image_paths(image_paths)
     if not image_paths:
         raise ValueError("At least one slide image is required for speech PDF")
 
@@ -570,13 +594,13 @@ def rebuild_speech_pdf(
     pdf_dir: Path | None = None,
     timestamp: str | None = None,
     page_filter: set[int] | None = None,
-    variant_filter: set[int] | None = None,
 ) -> tuple[Path, int]:
-    """Rebuild ``presentation_speech_{timestamp}.pdf`` from slide PNGs and outline speech tags."""
-    image_paths = collect_slide_image_paths(
-        image_dir,
-        page_filter=page_filter,
-        variant_filter=variant_filter,
+    """Rebuild ``presentation_speech_{timestamp}.pdf`` from slide PNGs and outline speech tags.
+
+    Always uses the first image variant for each slide (ignores ``--variant``).
+    """
+    image_paths = first_slide_image_paths(
+        collect_slide_image_paths(image_dir, page_filter=page_filter)
     )
     work = pdf_dir or DEFAULT_WORK_DIR
     ts = timestamp or timestamp_from_image_dir(image_dir) or timestamp_slug()

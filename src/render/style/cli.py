@@ -11,8 +11,15 @@ from dotenv import load_dotenv
 
 from src.core.client_factory import create_image_client, normalize_provider, provider_label
 from src.core.config import load_config
-from src.core.paths import DEFAULT_OUTLINE_PATH, DEFAULT_WORK_DIR, IDEA_FILENAME, read_nonempty_text
-from src.render.style.refs import StyleSelectFn, generate_style_references
+from src.core.paths import (
+    DEFAULT_OUTLINE_PATH,
+    DEFAULT_WORK_DIR,
+    IDEA_FILENAME,
+    default_style_glob,
+    read_nonempty_text,
+    style_dir,
+)
+from src.render.style.refs import STYLE_CANDIDATES_DIRNAME, StyleSelectFn, generate_style_references
 
 load_dotenv()
 
@@ -187,8 +194,12 @@ def main(
     config.validate()
     image_client = create_image_client(config)
 
+    style_output_dir = style_dir()
+    style_output_dir.mkdir(parents=True, exist_ok=True)
+
     click.echo(f"Work dir: {work_dir.resolve()}")
     click.echo(f"Outline: {outline_path.resolve()}")
+    click.echo(f"Style dir: {style_output_dir.resolve()}")
     click.echo(f"Provider: {provider_label(image_client)}")
     click.echo(
         f"Generating two-tone style references ({candidates} candidates per stage: "
@@ -200,7 +211,7 @@ def main(
             image_client,
             idea=idea,
             outline=outline_text,
-            output_dir=work_dir,
+            output_dir=style_output_dir,
             candidates=candidates,
             select=selector,
         )
@@ -213,9 +224,11 @@ def main(
     click.echo(f"Saved {len(style_paths)} style reference(s):")
     for path in style_paths:
         click.echo(f"  - {path.resolve()}")
-    click.echo(f"  - {(work_dir / 'style_candidates').resolve()}/ (all candidates)")
+    click.echo(
+        f"  - {(style_output_dir / STYLE_CANDIDATES_DIRNAME).resolve()}/ (all candidates)"
+    )
 
-    style_glob = str(work_dir / "style_*.png")
+    style_glob = default_style_glob()
     if work_dir != DEFAULT_WORK_DIR:
         next_cmd = (
             f'python3 -m src.render.cli --outline {outline_path} '

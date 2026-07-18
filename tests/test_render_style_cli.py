@@ -36,13 +36,15 @@ def test_style_cli_generates_references_and_prints_compose_command(
     outline_path.write_text(VALID_OUTLINE, encoding="utf-8")
     (work_dir / IDEA_FILENAME).write_text("Future of AI coding", encoding="utf-8")
 
+    style_output = Path("style")
     style_paths = [
-        work_dir / "style_base_noncontent.png",
-        work_dir / "style_base_content.png",
-        work_dir / "style_cover.png",
-        work_dir / "style_transition.png",
-        work_dir / "style_content.png",
+        style_output / "style_base_noncontent.png",
+        style_output / "style_base_content.png",
+        style_output / "style_cover.png",
+        style_output / "style_transition.png",
+        style_output / "style_content.png",
     ]
+    generate_mock = AsyncMock(return_value=style_paths)
 
     with (
         patch("src.render.style.cli.load_dotenv"),
@@ -55,7 +57,7 @@ def test_style_cli_generates_references_and_prints_compose_command(
         patch("src.render.style.cli.create_image_client"),
         patch(
             "src.render.style.cli.generate_style_references",
-            new=AsyncMock(return_value=style_paths),
+            new=generate_mock,
         ),
     ):
         runner = CliRunner()
@@ -77,7 +79,9 @@ def test_style_cli_generates_references_and_prints_compose_command(
     assert "style_base_content.png" in result.output
     assert "style_cover.png" in result.output
     assert "python3 -m src.render.cli --outline" in result.output
-    assert "style_*.png" in result.output
+    assert 'style/*.png' in result.output or "style/*.png" in result.output
+    generate_mock.assert_awaited_once()
+    assert generate_mock.await_args.kwargs["output_dir"] == style_output
 
 
 def test_style_cli_missing_outline(tmp_path: Path) -> None:
