@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Polish Visuals
 
-Improve the visual tags, reference image tags, appendix, and visual structure of existing outline markdown files so every slide has production-ready art direction and is ready for style reference generation and slide composition.
+Improve the visual tags, reference image tags, appendix, and visual structure of existing outline markdown files so every slide has production-ready art direction that stays consistent with the slide title, bullets, and `[Speech:]`, and is ready for style reference generation and slide composition.
 
 ## Inputs
 
@@ -59,6 +59,7 @@ If a slide mentions or uses specific reference images (such as a presenter's hea
 
 Ensure every slide's `[Visual:]` tag reads as **production-ready art direction**, not a vague description. Check:
 
+- [ ] **Consistent with title, bullets, and speech:** Depicts the same message as the title and the same narrative the `[Speech:]` will voice — same focal idea, same contrast/sequence, same takeaway. Fix or rewrite visuals that invent a competing metaphor. Do not rewrite titles or bullets here — if the spoken/written message is wrong, leave a note for polish-content; only adjust `[Speech:]` when a visual metaphor change would otherwise leave narration mismatched.
 - [ ] Specifies the **focal object** and **foreground/background structure**.
 - [ ] Names a **layout pattern**: split-screen, grid, pipeline, roadmap, system diagram, film strip, etc.
 - [ ] Shows the **narrative visually** through contrast, sequence, hierarchy, cause/effect, before/after, or workflow movement.
@@ -92,7 +93,7 @@ If warnings remain, fix them in a second pass.
 
 Summarize per file:
 
-- Visual tags corrected or enhanced
+- Visual tags corrected or enhanced (including title/speech consistency)
 - Reference image tags added or fixed
 - Appendix corrections applied
 - Visual structure/background fixes applied
@@ -104,6 +105,6 @@ Summarize per file:
 
 The goal is surgical improvement, not wholesale rewriting. Specifically:
 
-- **Keep the deck's identity**: title, narrative arc, section structure, and written/textual content.
-- **Keep strong slides intact**: if a slide already has a detailed, production-ready visual tag and correct style references — leave it alone.
+- **Keep the deck's identity**: presentation title, narrative arc, section structure, and written/textual content (titles and bullets).
+- **Keep strong slides intact**: if a slide already has a detailed, production-ready visual tag, correct style references, and visual/speech message alignment — leave it alone.
 - **Match the existing visual theme**: maintain consistency with the colors, fonts, and motifs defined in the original outline and appendix.

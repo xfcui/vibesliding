@@ -1,12 +1,12 @@
 ---
 name: polish-content
-description: Polish existing PPT outline markdown files focusing on content — strengthening bullets, grounding metrics, improving speech tags, and fixing content-related structural issues. Use when the user wants to improve, polish, refine, review, or optimize the content, metrics, bullets, or narration of one or more outline files. When multiple outlines are given, launches one subagent per file for parallel content optimization.
+description: Polish existing PPT outline markdown files focusing on content — titles as messages, strengthening bullets, grounding metrics, improving speech tags, and fixing content-related structural issues. Use when the user wants to improve, polish, refine, review, or optimize the content, titles, metrics, bullets, or narration of one or more outline files. When multiple outlines are given, launches one subagent per file for parallel content optimization.
 disable-model-invocation: true
 ---
 
 # Polish Content
 
-Improve the content, metrics, bullets, and narration of existing outline markdown files so every slide is presentation-grade, persuasive, and logically sound.
+Improve the content, metrics, bullets, and narration of existing outline markdown files so every slide is presentation-grade, persuasive, and logically sound — with titles that deliver a message, precise easy-to-follow content, and speech that stays consistent with the visual.
 
 ## Inputs
 
@@ -53,7 +53,7 @@ Apply in order. **Do not rewrite slides that are already strong** — preserve w
 - [ ] Sequential `## Slide N: [Title]` numbering with no gaps
 - [ ] Content slides count matches the requested slide count (hook + sections + optional call to action). Cover, transition, and ending slides are extra and not counted.
 - [ ] The deck is divided into 3-6 sections, with exactly one transition slide before each section (but none before hook or call to action).
-- [ ] Transition slide titles are prefixed with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`).
+- [ ] Transition slide titles are prefixed with `Roadmap:` plus the section's message (e.g. `## Slide 6: Roadmap: Leave the Editor Behind`).
 
 #### B. Metric grounding (Highest-value pass)
 
@@ -64,11 +64,21 @@ Cross-reference every factual claim against `research.md` and `source.md`:
 - [ ] Add missing citations where the research report provides them.
 - [ ] Do NOT fabricate numbers — if no source exists, keep the claim qualitative.
 
-#### C. Bullet quality
+#### C. Titles (message to deliver)
+
+- [ ] Content, hook, cover, CTA, and ending titles state the message to deliver (claim, tension, or decision) — not a topic label ("Planning Overview" → "Agents Fail Without a Plan").
+- [ ] Transition titles keep `Roadmap:` then state the section's message (`Roadmap: Leave the Editor Behind`, not `Roadmap: Tools Overview`).
+- [ ] If the audience only reads the title, they still know what the slide argues.
+- [ ] Title, bullets, and `[Speech:]` all point at the same takeaway. If `[Visual:]` fights that message, note it for polish-visuals (or lightly align the visual metaphor only when the title/speech rewrite requires it — do not restyle the deck).
+
+#### D. Bullet quality (precise, easy, logical, callback)
 
 Content slides (5-6 bullets):
 
 - [ ] Every bullet uses `**Label:** explanation` format where the explanation is self-contained (makes sense without reading the slide title).
+- [ ] Precise and easy to understand — concrete wording, short sentences, no unnecessary jargon.
+- [ ] Logical flow: setup → mechanism → evidence → implication (not a shuffled list).
+- [ ] Callbacks where useful: reconnect to an earlier hook, section, or motif so the deck reads as one argument.
 - [ ] Every content slide ends with an explicit takeaway: `Core insight:`, `Core logic:`, or `Anti-pattern:`.
 - [ ] Replace thin bullets ("Performance: Fast") with substantive ones that explain *why it matters*.
 
@@ -82,12 +92,13 @@ Transition slides (2-4 bullets):
 - [ ] Show the full section map with the current section bolded.
 - [ ] Include a one-line thesis for the upcoming section.
 
-#### D. Speech tags
+#### E. Speech tags (consistent with visual)
 
-Every slide must have exactly one `[Speech:]` tag that reads as **natural presenter narration**:
+Every slide must have exactly one `[Speech:]` tag that reads as **natural presenter narration** and stays consistent with the title, bullets, and `[Visual:]`:
 
-- [ ] Content slides: 60-90 seconds (roughly 3-6 sentences); expands on bullets with context, emphasis, or examples not visible on the slide.
-- [ ] Content slides: end with a **bridge sentence** that leads into the next slide's topic (e.g. "Now let's look at the tools that power this pipeline.").
+- [ ] Opens on the title's message and narrates the same focal contrast/sequence the visual depicts — no competing metaphor or different claim.
+- [ ] Content slides: 60-90 seconds (roughly 3-6 sentences); expands on bullets with context, emphasis, callbacks, or examples not visible on the slide.
+- [ ] Content slides: after the takeaway lands, end with a short **bridge sentence** into the next slide (preview only — does not replace this slide's message).
 - [ ] Transition slides: 15-30 seconds; set up what the upcoming section covers.
 - [ ] Cover slide: establish the hook and promise of the talk.
 - [ ] Ending slide: recap the key thesis and invite questions.
@@ -108,9 +119,10 @@ If warnings remain, fix them in a second pass.
 
 Summarize per file:
 
+- Titles rewritten to deliver a message (count)
 - Metrics grounded (count of vague → specific replacements)
-- Bullets rewritten or added
-- Speech tags corrected
+- Bullets rewritten or added (precision, flow, callbacks)
+- Speech tags corrected (including visual/content consistency)
 - Structural fixes applied
 - Any remaining warnings
 
@@ -120,7 +132,7 @@ Summarize per file:
 
 The goal is surgical improvement, not wholesale rewriting. Specifically:
 
-- **Keep the deck's identity**: title, narrative arc, section structure, and visual/appendix elements.
-- **Keep strong slides intact**: if a slide already has 5-6 substantive bullets, specific metrics, and natural speech — leave it alone.
+- **Keep the deck's identity**: presentation title, narrative arc, section structure, and visual/appendix elements (unless a title/speech fix requires a light visual-metaphor alignment).
+- **Keep strong slides intact**: if a slide already has a message title, 5-6 precise well-ordered bullets, grounded metrics, and speech consistent with the visual — leave it alone.
 - **Match the existing voice**: if the outline uses a particular tone (technical, conversational, formal), maintain it.
 - **Match the language**: if the outline is in Chinese, optimize in Chinese; if English, stay English.

@@ -9,6 +9,9 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 
 ## Core Principles
 
+- **Title is the message:** The slide title states the takeaway to deliver — a claim, tension, or decision — not a topic label. If the audience only reads the title, they should still know what the slide argues.
+- **Content is precise and easy:** Bullets are exact, scannable, and easy to understand; order them in a logical flow; use callbacks to earlier slides so the deck feels like one argument, not disconnected facts.
+- **Visual and speech stay consistent:** `[Visual:]` and `[Speech:]` tell the same story as the title and bullets — same focal idea, same contrast or sequence, same takeaway. The visual shows it; the speech narrates it; neither invents a different message.
 - **Visual carries the content:** The composition communicates each slide's narrative, sequence, contrast, or transformation before any text is read.
 - **Text earns its place:** Bullets act as labels, anchors, and reasoning the visual cannot show; cut anything the visual already conveys.
 - **One slide, one idea:** Resolve every slide to a single explicit takeaway, not a collection of loosely related facts.
@@ -76,23 +79,38 @@ Structural and navigational slides that frame the deck. Keep bullets minimal (2-
 
 - The requested slide count counts **content slides only** (hook + sections + optional call to action). Cover, transition, and ending slides are always extra.
 - Every deck MUST divide its content into **3-6 sections**, with exactly **one transition slide before each section** (but none before hook or call to action) so the deck reads as 3-6 acts, never one undifferentiated run of content slides. The hook starts immediately after the cover slide.
-- Make each transition slide detectable: prefix its title with `Roadmap:` (e.g. `## Slide 6: Roadmap: From Editor to Agent`) **and** include a progress marker such as `progress bar N/total` in its `[Visual:]` tag.
+- Make each transition slide detectable: prefix its title with `Roadmap:` plus the section's message (e.g. `## Slide 6: Roadmap: Leave the Editor Behind`) **and** include a progress marker such as `progress bar N/total` in its `[Visual:]` tag.
 - Reuse one consistent roadmap/section-map composition across all transition slides, bolding or highlighting only the current section each time.
 
 ## Writing Standards
 
+### Titles (message to deliver)
+
+- Write titles as the message the slide delivers — e.g. `Agents Fail Without a Plan` not `Planning Overview`.
+- Prefer claims, contrasts, or decisions over nouns and section labels.
+- Keep titles short enough to read in one glance; the bullets then prove the message.
+- **Exception — transition slides:** Keep the required `Roadmap:` prefix, then state the section's message (not a bare topic). Good: `Roadmap: Leave the Editor Behind`. Weak: `Roadmap: Section 2` or `Roadmap: Tools Overview`.
+
+### Content (precise, easy, logical, callback)
+
 - Write self-contained bullets that make sense without relying on the slide title.
 - Prefer `**Label:** explanation` bullets that explain why the point matters, not just what it is.
+- Be precise: prefer concrete wording and verified specifics over vague claims ("fast," "significant," "large").
+- Keep language easy to understand — short sentences, plain words, no jargon unless the audience already knows it.
+- Order bullets in a logical flow (setup → mechanism → evidence → implication), not a random list.
+- Use callbacks: reconnect to earlier hooks, sections, or motifs so the audience hears one continuous argument ("Remember that failure mode from earlier — here is the fix.").
 - Keep text supportive and compact so the slide is not forced to tell the whole content through bullets.
 - Use summary bullets to make the takeaway explicit: `Core insight:`, `Core logic:`, or `Anti-pattern:`.
 - Use tables for taxonomies or comparisons, and sub-bullets only for workflows such as `Plan -> Implement -> Test`.
 
 ```markdown
 # Good
+## Slide 4: Clear Boundaries Beat Clever Coupling
 - **Clear Boundaries:** Each component should handle a single, focused responsibility
 - Core insight: Systems perform best with clear interfaces and isolation
 
-# Bad (too brief)
+# Bad (topic title + thin bullets)
+## Slide 4: Architecture Notes
 - Token limit: 128k-200k
 - Performance: Fast
 ```
@@ -101,20 +119,25 @@ Structural and navigational slides that frame the deck. Keep bullets minimal (2-
 
 Write `[Visual:]` prompts as production-ready art direction that tells the slide's content faster than decoration or text alone.
 
+- **Consistency with title, bullets, and speech:** The visual must depict the same message as the slide title and the same narrative the speech will voice — same focal idea, same contrast/sequence, same takeaway. Do not invent a different metaphor that fights the spoken story.
 - **Visual style ownership:** `[Visual:]` owns layout, composition, diagram language, icon treatment, recurring motifs, and animation intent. Do NOT restate these in the appendix — define them here per slide (or inherit from style reference images).
 - Specify the focal object, foreground/background structure, and layout pattern: split-screen, grid, pipeline, roadmap, or system diagram.
 - Show the narrative visually through contrast, sequence, hierarchy, cause/effect, before/after, or movement through a workflow.
 - Preserve deck continuity with recurring motifs such as beams, nodes, panels, icons, section colors, or progress markers.
 - **Two-tone backgrounds:** Content slides use a white/light background for maximum readability; non-content slides (cover, transitions, ending) use a dark background to create a bold visual "curtain" that distinguishes structural pauses from teaching slides.
+- Reference style plates where appropriate: `style_base_noncontent.png` (dark curtain), `style_base_content.png` (light teaching), `style_cover.png`, `style_transition.png`, `style_content.png`.
+- On content and transition slides, include a slide marker such as `Slide number: N/total` (omit on cover and ending).
 - Keep generated-image text minimal; avoid dense labels, watermarks, fake logos, AI-generation stamps, page numbers, and decorative text unless required.
 - When reference slide images exist, extract concrete style rules from them and reuse those rules in later visual prompts.
 
 ## Speech Tags
 
-Write `[Speech:]` as natural presenter narration.
+Write `[Speech:]` as natural presenter narration that stays consistent with the title, bullets, and `[Visual:]`.
 
-- Expand on the bullets with context, emphasis, transitions, or examples not already visible on the slide.
-- Aim for 60-90 seconds on content slides; use shorter scripts for cover, ending, and transition slides when appropriate.
+- **Consistency with visual and content:** Narrate what the slide shows and argues — open on the title's message, walk the visual's focal contrast or sequence, land on the same takeaway as the bullets. Do not introduce a competing metaphor or a different claim.
+- Expand on the bullets with context, emphasis, transitions, callbacks to earlier slides, or examples not already visible on the slide.
+- Aim for 60-90 seconds on content slides; 15-30 seconds on transition slides; shorter scripts for cover and ending when appropriate.
+- On content slides, end with a short **bridge sentence** into the next slide — after the takeaway lands, not instead of it. The bridge previews the next idea; it must not replace this slide's message or fight the visual.
 - Keep the tone conversational, as if presenting live rather than reading a document.
 
 ## Appendix Requirements
