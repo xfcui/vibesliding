@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 
 import click
+from click.core import ParameterSource
 from dotenv import load_dotenv
 
 from src.render.cli import parse_page_spec
@@ -15,7 +16,7 @@ from src.core.config import (
     load_minimax_tts_config,
 )
 from src.core.paths import (
-    DEFAULT_OUTLINE_PATH,
+    DEFAULT_SCRIPT_PATH,
     DEFAULT_WORK_DIR,
     presentation_video_path,
     read_nonempty_text,
@@ -35,18 +36,36 @@ def _parse_page_spec_or_usage(page: str | None) -> set[int] | None:
         raise click.UsageError(str(exc)) from exc
 
 
-def _resolve_outline_path(image_dir: Path, outline_path: Path) -> Path:
-    if outline_path.is_file():
-        return outline_path
+def _snapshot_scripts(image_dir: Path) -> list[Path]:
+    """Prefer ``script_*.md`` snapshots, else ``outline_*.md``, oldest first."""
+    scripts = list(image_dir.glob("script_*.md"))
+    pool = scripts or list(image_dir.glob("outline_*.md"))
+    return sorted(pool, key=lambda path: (path.stat().st_mtime, path.name))
 
-    snapshots = sorted(image_dir.glob("outline_*.md"))
-    if snapshots:
-        return snapshots[0]
 
-    raise click.UsageError(
-        f"Outline not found: {outline_path.resolve()}. "
-        "Pass --outline or ensure the render output directory contains an outline snapshot."
+def _resolve_script_path(
+    image_dir: Path,
+    script_path: Path,
+    *,
+    explicit: bool,
+) -> Path:
+    if script_path.is_file():
+        return script_path
+    if explicit:
+        raise click.UsageError(f"Script not found: {script_path.resolve()}")
+
+    snapshots = _snapshot_scripts(image_dir)
+    if not snapshots:
+        raise click.UsageError(
+            f"Script not found: {script_path.resolve()}. "
+            "Pass --script or ensure the render output directory contains a script snapshot."
+        )
+    chosen = snapshots[-1]
+    click.echo(
+        f"Script not found: {script_path.resolve()}. Using {chosen.resolve()}",
+        err=True,
     )
+    return chosen
 
 
 async def _synthesize_speech(
@@ -115,7 +134,8 @@ def _run_narrate(
     *,
     image_dir: Path,
     work_dir: Path,
-    outline_path: Path,
+    script_path: Path,
+    script_explicit: bool,
     page: str | None,
     variant: str | None,
     api_key: str | None,
@@ -132,15 +152,17 @@ def _run_narrate(
     if not image_dir.is_dir():
         raise click.UsageError(f"Image directory not found: {image_dir.resolve()}")
 
-    resolved_outline = _resolve_outline_path(image_dir, outline_path)
-    outline_text = read_nonempty_text(resolved_outline, label="Outline file")
+    resolved_script = _resolve_script_path(
+        image_dir, script_path, explicit=script_explicit
+    )
+    script_text = read_nonempty_text(resolved_script, label="Script file")
     page_numbers = _parse_page_spec_or_usage(page)
     variant_numbers = _parse_page_spec_or_usage(variant)
 
     try:
         segments = collect_slide_segments(
             image_dir,
-            outline_text,
+            script_text,
             page_filter=page_numbers,
             variant_filter=variant_numbers,
         )
@@ -193,12 +215,15 @@ def _run_narrate(
     help="Work directory for presentation_video_*.mp4 output.",
 )
 @click.option(
-    "--outline",
-    "outline_path",
+    "--script",
+    "script_path",
     type=click.Path(path_type=Path),
-    default=DEFAULT_OUTLINE_PATH,
+    default=DEFAULT_SCRIPT_PATH,
     show_default=True,
-    help="Outline with [Speech:] tags. Falls back to outline_*.md in --output.",
+    help=(
+        "Script with [Speech:] tags. When this option is omitted and the default "
+        "file is missing, uses the newest script_*.md snapshot in --output."
+    ),
 )
 @click.option(
     "--output",
@@ -274,7 +299,7 @@ def _run_narrate(
 )
 def main(
     work_dir: Path,
-    outline_path: Path,
+    script_path: Path,
     image_dir: Path,
     page: str | None,
     variant: str | None,
@@ -286,7 +311,7 @@ def main(
     mux_only: bool,
     silent_seconds: float,
 ) -> None:
-    """Convert slide images and outline speech tags into a narrated MP4 video."""
+    """Record slide images and script speech tags into a narrated MP4 video."""
     if reference_audio is not None and voice_id:
         raise click.UsageError("Use either --reference-audio or --voice-id, not both.")
     if reference_audio is not None and not reference_audio.is_file():
@@ -294,10 +319,15 @@ def main(
             f"Reference audio not found: {reference_audio.resolve()}"
         )
 
+    script_explicit = (
+        click.get_current_context().get_parameter_source("script_path")
+        is not ParameterSource.DEFAULT
+    )
     _run_narrate(
         image_dir=image_dir,
         work_dir=work_dir,
-        outline_path=outline_path,
+        script_path=script_path,
+        script_explicit=script_explicit,
         page=page,
         variant=variant,
         api_key=api_key,

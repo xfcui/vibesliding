@@ -2,6 +2,6 @@
 
 from src.render.gen import SlideImageGenerator
 from src.core.api_client import OpenRouterClient, VolcengineClient
-from src.outline.parser import Slide
+from src.core.parser import Slide
 
 __all__ = ["OpenRouterClient", "VolcengineClient", "SlideImageGenerator", "Slide"]

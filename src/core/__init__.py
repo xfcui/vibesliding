@@ -1,1 +1,1 @@
-"""Shared core modules used across research, outline, render, and present."""
+"""Shared core modules used across plan, write, design, render, and present."""

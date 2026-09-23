@@ -32,41 +32,6 @@ def resolve_ffmpeg() -> str:
     )
 
 
-def require_ffmpeg() -> tuple[str, str]:
-    """Return ``(ffmpeg, ffprobe)`` executables or raise."""
-    ffmpeg = resolve_ffmpeg()
-    ffprobe = shutil.which("ffprobe")
-    if not ffprobe:
-        raise FfmpegNotFoundError(
-            "ffprobe is required when probing audio duration. "
-            "Install ffmpeg (https://ffmpeg.org/download.html)."
-        )
-    return ffmpeg, ffprobe
-
-
-def probe_audio_duration(ffprobe: str, audio_path: Path) -> float:
-    """Return audio duration in seconds."""
-    result = subprocess.run(
-        [
-            ffprobe,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(audio_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    duration = float(result.stdout.strip())
-    if duration <= 0:
-        raise ValueError(f"Invalid audio duration for {audio_path}: {duration}")
-    return duration
-
-
 def render_slide_segment(
     ffmpeg: str,
     *,

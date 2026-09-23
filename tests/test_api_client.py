@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 import httpx
 from src.core.api_client import (
+    OPENROUTER_IMAGE_PROMPT_MAX_CHARS,
     OpenRouterClient,
     VolcengineClient,
     _credits_timeout,
+    _http_error_detail,
     _image_timeout,
     _is_retryable_exception,
+    _merge_prompt_parts,
+    _supported_parameter_names,
 )
 
 
@@ -89,30 +95,187 @@ async def test_extract_image_success(client, mock_api_response, mock_image_bytes
 
 @pytest.mark.asyncio
 async def test_extract_image_failure(client):
-    with pytest.raises(ValueError, match="No choices in response"):
+    with pytest.raises(ValueError, match="No images in response"):
         client._extract_image({})
 
 @pytest.mark.asyncio
 async def test_generate_single_image_mocked(client, mock_api_response, mock_image_bytes, respx_mock):
-    # Mock the API endpoint
-    respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+    # Mock the unified Image API endpoint
+    route = respx_mock.post(f"{client.BASE_URL}/images").mock(
         return_value=httpx.Response(200, json=mock_api_response)
     )
-    
+
     async with httpx.AsyncClient() as http_client:
         result = await client._generate_single_image(
-            http_client, 
-            prompt="test prompt"
+            http_client,
+            prompt="test prompt",
+            system_prompt="system rules",
+            image_size="1K",
         )
-    
+
     assert result == mock_image_bytes
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["prompt"] == "system rules\n\ntest prompt"
+    assert sent["aspect_ratio"] == "16:9"
+    assert sent["resolution"] == "1K"
+    assert sent["n"] == 1
+    assert "input_references" not in sent
+
+
+@pytest.mark.asyncio
+async def test_generate_single_image_sends_reference_images(
+    client, mock_api_response, mock_image_bytes, respx_mock
+):
+    route = respx_mock.post(f"{client.BASE_URL}/images").mock(
+        return_value=httpx.Response(200, json=mock_api_response)
+    )
+
+    async with httpx.AsyncClient() as http_client:
+        await client._generate_single_image(
+            http_client,
+            prompt="test prompt",
+            reference_images=[mock_image_bytes, mock_image_bytes],
+        )
+
+    sent = json.loads(route.calls[0].request.content)
+    refs = sent["input_references"]
+    assert len(refs) == 2
+    assert all(ref["type"] == "image_url" for ref in refs)
+    assert all(
+        ref["image_url"]["url"].startswith("data:image/png;base64,") for ref in refs
+    )
+
+
+def test_merge_prompt_parts_keeps_user_when_system_cannot_fit() -> None:
+    user = "USER PROMPT MUST SURVIVE"
+    system = "SYSTEM " + ("z" * 400)
+    merged = _merge_prompt_parts(user, system, max_chars=120)
+    assert merged == user
+    assert len(merged) <= 120
+
+
+def test_merge_prompt_parts_clips_system_when_there_is_room() -> None:
+    user = "USER PROMPT MUST SURVIVE"
+    system = "SYSTEM " + ("z" * 800)
+    merged = _merge_prompt_parts(user, system, max_chars=400)
+    assert user in merged
+    assert len(merged) <= 400
+    assert "[truncated]" in merged
+
+
+def test_image_payload_stays_within_openrouter_prompt_limit() -> None:
+    client = OpenRouterClient(
+        api_key="fake-key",
+        model="openai/gpt-image-2.5-sunburst",
+        supported_parameters=frozenset({"aspect_ratio", "quality"}),
+    )
+    payload = client._build_image_payload(
+        "GENERATE SLIDE 20: keep the current slide",
+        "system " + ("s" * 25_000),
+        None,
+        image_size="2K",
+        supported=client._supported_parameters,
+    )
+    assert len(payload["prompt"]) <= OPENROUTER_IMAGE_PROMPT_MAX_CHARS
+    assert "GENERATE SLIDE 20" in payload["prompt"]
+
+
+def test_image_payload_omits_resolution_for_openai_quality_models() -> None:
+    client = OpenRouterClient(
+        api_key="fake-key",
+        model="openai/gpt-image-2.5-sunburst",
+        supported_parameters=frozenset(
+            {"aspect_ratio", "quality", "n", "input_references"}
+        ),
+    )
+    payload = client._build_image_payload(
+        "a slide",
+        None,
+        None,
+        image_size="2K",
+        supported=client._supported_parameters,
+    )
+    assert payload["model"] == "openai/gpt-image-2.5-sunburst"
+    assert payload["aspect_ratio"] == "16:9"
+    assert payload["quality"] == "high"
+    assert payload["n"] == 1
+    assert "resolution" not in payload
+
+
+def test_image_payload_omits_resolution_when_capabilities_unknown() -> None:
+    client = OpenRouterClient(api_key="fake-key", model="openai/gpt-image-2.5-sunburst")
+    payload = client._build_image_payload(
+        "a slide", None, None, image_size="2K", supported=None
+    )
+    assert "resolution" not in payload
+    assert "quality" not in payload
+    assert payload["aspect_ratio"] == "16:9"
+
+
+def test_supported_parameter_names_unions_endpoints() -> None:
+    names = _supported_parameter_names(
+        {
+            "endpoints": [
+                {"supported_parameters": {"aspect_ratio": {}, "quality": {}}},
+                {"supported_parameters": {"n": {}}},
+            ]
+        }
+    )
+    assert names == frozenset({"aspect_ratio", "quality", "n"})
+
+
+def test_http_error_detail_reads_openrouter_message() -> None:
+    response = httpx.Response(
+        400,
+        json={"error": {"message": "Invalid input: resolution is not supported"}},
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/images"),
+    )
+    assert "resolution is not supported" in _http_error_detail(response)
+
+
+@pytest.mark.asyncio
+async def test_generate_single_image_uses_model_capabilities(
+    mock_api_response, mock_image_bytes, respx_mock
+) -> None:
+    client = OpenRouterClient(api_key="fake-key", model="openai/gpt-image-2.5-sunburst")
+    respx_mock.get(
+        f"{client.BASE_URL}/images/models/openai/gpt-image-2.5-sunburst/endpoints"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "endpoints": [
+                    {
+                        "supported_parameters": {
+                            "aspect_ratio": {"type": "enum", "values": ["16:9"]},
+                            "quality": {"type": "enum", "values": ["high"]},
+                            "n": {"type": "range", "min": 1, "max": 10},
+                        }
+                    }
+                ]
+            },
+        )
+    )
+    route = respx_mock.post(f"{client.BASE_URL}/images").mock(
+        return_value=httpx.Response(200, json=mock_api_response)
+    )
+
+    async with httpx.AsyncClient() as http_client:
+        result = await client._generate_single_image(
+            http_client, prompt="test prompt", image_size="2K"
+        )
+
+    assert result == mock_image_bytes
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["quality"] == "high"
+    assert "resolution" not in sent
 
 
 @pytest.mark.asyncio
 async def test_generate_single_image_does_not_retry_permanent_http_error(
     client, respx_mock
 ) -> None:
-    route = respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+    route = respx_mock.post(f"{client.BASE_URL}/images").mock(
         return_value=httpx.Response(400, json={"error": {"message": "bad request"}})
     )
 
@@ -165,12 +328,12 @@ async def test_fetch_credits_http_error_returns_outcome(client, respx_mock):
 
 @pytest.mark.asyncio
 async def test_generate_images_parallel_mocked(client, mock_api_response, mock_image_bytes, respx_mock):
-    respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+    respx_mock.post(f"{client.BASE_URL}/images").mock(
         return_value=httpx.Response(200, json=mock_api_response)
     )
     prompts = [
-        ("prompt 1", None, None, None, None),
-        ("prompt 2", None, None, None, None),
+        ("prompt 1", None, None),
+        ("prompt 2", None, None),
     ]
     results = await client.generate_images_parallel(prompts)
     assert len(results) == 2
@@ -181,12 +344,12 @@ async def test_generate_images_parallel_mocked(client, mock_api_response, mock_i
 async def test_generate_images_parallel_invokes_on_result_per_completion(
     client, mock_api_response, mock_image_bytes, respx_mock
 ):
-    respx_mock.post(f"{client.BASE_URL}/chat/completions").mock(
+    respx_mock.post(f"{client.BASE_URL}/images").mock(
         return_value=httpx.Response(200, json=mock_api_response)
     )
     prompts = [
-        ("prompt 1", None, None, None, None),
-        ("prompt 2", None, None, None, None),
+        ("prompt 1", None, None),
+        ("prompt 2", None, None),
     ]
     seen: list[tuple[int, bytes | Exception]] = []
 
@@ -224,7 +387,7 @@ async def test_volcengine_parallel_mocked(mock_image_bytes, respx_mock):
     respx_mock.post(f"{client._base_url}/images/generations").mock(
         return_value=httpx.Response(200, json={"data": [{"b64_json": payload_b64}]})
     )
-    prompts = [("a", None, None, None, None), ("b", None, None, None, None)]
+    prompts = [("a", None, None), ("b", None, None)]
     results = await client.generate_images_parallel(prompts)
     assert len(results) == 2
     assert all(r == mock_image_bytes for r in results)

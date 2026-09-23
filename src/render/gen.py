@@ -7,39 +7,169 @@ import shlex
 from pathlib import Path
 from typing import Final
 
-from src.core.api_client import ImagePrompt, OpenRouterClient, VolcengineClient
-from src.core.export import (
-    create_pdf_from_images,
-    create_speech_pdf,
-    save_image,
-    slides_by_index_from_outline,
+from src.core.api_client import (
+    ImagePrompt,
+    OpenRouterClient,
+    VolcengineClient,
 )
 from src.core.paths import (
     DEFAULT_WORK_DIR,
-    presentation_slides_pdf_path,
-    presentation_speech_pdf_path,
+    STYLE_IMAGE_EXTENSIONS,
+    slides_pptx_path,
+    style_images_in_dir,
     timestamp_from_image_dir,
     timestamp_slug,
 )
+from src.core.export import (
+    create_pptx_from_images,
+    save_image,
+    slides_by_index_from_outline,
+)
 from src.core.resolve import PathResolveError, resolve_patterns
-from src.outline.parser import Slide, extract_global_style, parse_markdown
-from src.outline.roles import classify_slide_role
-from src.render.style.refs import select_style_paths_for_role
+from src.core.parser import Slide, extract_global_style, parse_markdown
+from src.core.roles import SlideRole, classify_slide_role
+from src.design.plates import select_style_paths_for_role
 
 # Constants
-CONTENT_PREVIEW_LENGTH: Final[int] = 200
+VISUAL_FOCUS_MAX_CHARS: Final[int] = 160
 MAX_FAILURE_PREVIEW: Final[int] = 3
 REFERENCE_TAG_PATTERN: Final[re.Pattern] = re.compile(
     r"\[(?:Reference(?:\s+(?:Images?|Photos?))?|"
     r"Image\s+Reference|Photo\s+Reference|Refs?)\s*:\s*(.*?)\]",
     re.IGNORECASE | re.DOTALL,
 )
+STYLE_TAG_PATTERN: Final[re.Pattern] = re.compile(
+    r"\[Styles?\s*:\s*(.*?)\]",
+    re.IGNORECASE | re.DOTALL,
+)
 SPEECH_TAG_PATTERN: Final[re.Pattern] = re.compile(
     r"\[Speech\s*:\s*(.*?)\]", re.IGNORECASE | re.DOTALL,
 )
+VISUAL_TAG_PATTERN: Final[re.Pattern] = re.compile(
+    r"\[Visual\s*:\s*(.*?)\]", re.IGNORECASE | re.DOTALL,
+)
+HTML_COMMENT_PATTERN: Final[re.Pattern] = re.compile(r"<!--.*?-->", re.DOTALL)
+RULE_LINE_PATTERN: Final[re.Pattern] = re.compile(r"^\s*-{3,}\s*$", re.MULTILINE)
+SENTENCE_BREAK_PATTERN: Final[re.Pattern] = re.compile(r"(?<=[.!?;。！？；])\s+")
 SUPPORTED_REFERENCE_EXTENSIONS: Final[frozenset[str]] = frozenset(
     {".png", ".jpg", ".jpeg"}
 )
+SLIDE_PROMPT_SUFFIX: Final[str] = "_prompt.txt"
+ROLE_BRIEFS: Final[dict[str, str]] = {
+    "cover": (
+        "Cover slide. Dark curtain background. Make the premise legible at a glance. "
+        "No slide number."
+    ),
+    "ending": (
+        "Ending slide. Dark curtain background that visually reconnects to the cover. "
+        "Land one take-home message. No slide number."
+    ),
+    "transition": (
+        "Roadmap transition. Dark curtain background. Reuse the deck's section map, "
+        "highlight only the current section, and show the section progress marker. "
+        "No slide number."
+    ),
+    "content": (
+        "Content / teaching slide. White or light background. Show the page number "
+        "only where the [Visual:] instruction asks for it, never the total page count."
+    ),
+}
+
+
+def _pick_tag(pattern: re.Pattern, text: str) -> re.Match | None:
+    """Return the last non-empty match of *pattern*, else the last match."""
+    matches = list(pattern.finditer(text))
+    if not matches:
+        return None
+    for match in reversed(matches):
+        if match.group(1).strip():
+            return match
+    return matches[-1]
+
+
+def _split_visual(content: str) -> tuple[str, str]:
+    """Return *content* without its chosen ``[Visual:]`` tag, and the tag text."""
+    match = _pick_tag(VISUAL_TAG_PATTERN, content)
+    if match is None:
+        return content, ""
+    rest = content[: match.start()] + content[match.end() :]
+    return rest.strip(), match.group(1).strip()
+
+
+def _clean_slide_content(content: str) -> str:
+    """Drop tags, comments, and separators that are not on-slide content."""
+    text = HTML_COMMENT_PATTERN.sub("", content)
+    text = STYLE_TAG_PATTERN.sub("", text)
+    text = REFERENCE_TAG_PATTERN.sub("", text)
+    text = SPEECH_TAG_PATTERN.sub("", text)
+    text = RULE_LINE_PATTERN.sub("", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _visual_focus(content: str, max_chars: int = VISUAL_FOCUS_MAX_CHARS) -> str:
+    """First clause of a slide's ``[Visual:]`` tag, collapsed to one line."""
+    _, visual = _split_visual(content)
+    if not visual:
+        return ""
+    first = SENTENCE_BREAK_PATTERN.split(visual, maxsplit=1)[0]
+    first = re.sub(r"\s+", " ", first).strip().rstrip(";；,，")
+    if len(first) <= max_chars:
+        return first
+    return first[:max_chars].rstrip() + "…"
+
+
+def _format_generation_failure(exc: Exception) -> str:
+    """Include the API error body when httpx hid it behind a status line."""
+    from src.core.api_client import _http_error_detail
+
+    response = getattr(exc, "response", None)
+    if response is None:
+        return str(exc)
+    try:
+        detail = _http_error_detail(response)
+    except Exception:
+        return str(exc)
+    text = str(exc)
+    return text if detail in text else f"{text} — {detail}"
+
+
+def slide_prompt_path(output_dir: Path, slide_index: int) -> Path:
+    """Sidecar text file holding the prompt used for one slide's images."""
+    return output_dir / f"slide_p{slide_index:02d}{SLIDE_PROMPT_SUFFIX}"
+
+
+def save_slide_prompt(
+    slide: Slide,
+    output_dir: Path,
+    *,
+    user_prompt: str,
+    system_prompt: str,
+    style_reference_paths: list[Path],
+    slide_reference_paths: list[Path],
+) -> Path:
+    """Write the prompt used for *slide*'s images into *output_dir*."""
+
+    def _names(paths: list[Path]) -> str:
+        return ", ".join(str(path) for path in paths) if paths else "none"
+
+    record = "\n".join(
+        [
+            f"# Slide {slide.index}: {slide.title}",
+            f"Style references: {_names(style_reference_paths)}",
+            f"Slide references: {_names(slide_reference_paths)}",
+            "",
+            "## System prompt",
+            system_prompt.strip(),
+            "",
+            "## User prompt",
+            user_prompt.strip(),
+            "",
+        ]
+    )
+    prompt_path = slide_prompt_path(output_dir, slide.index)
+    prompt_path.parent.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(record, encoding="utf-8")
+    return prompt_path
 
 
 def _split_reference_patterns(raw_patterns: str) -> list[str]:
@@ -104,13 +234,67 @@ def resolve_reference_image_paths(
         raise ValueError(exc.message) from exc
 
 
+def _extract_style_plate_names(slide: Slide) -> list[str]:
+    """Return style-plate filenames declared in the slide's ``[Style:]`` tags."""
+    names: list[str] = []
+    for match in STYLE_TAG_PATTERN.finditer(slide.content):
+        names.extend(_split_reference_patterns(match.group(1)))
+    return names
+
+
+def resolve_style_plate_paths(slide: Slide, style_dir: Path | None) -> list[Path]:
+    """Resolve a slide's ``[Style: filename]`` tags to plates inside *style_dir*.
+
+    The tag takes bare filenames, not paths: plates always live in the ``--style``
+    directory. Returns an empty list when the slide declares no plate, which lets
+    the caller fall back to role-based routing.
+    """
+    names = _extract_style_plate_names(slide)
+    if not names:
+        return []
+    if style_dir is None:
+        raise ValueError(
+            f"Slide {slide.index} declares [Style: {', '.join(names)}] but no style "
+            "directory is available; pass --style <dir>."
+        )
+
+    resolved: list[Path] = []
+    for name in names:
+        candidate = Path(name)
+        if candidate.name != name:
+            raise ValueError(
+                f"[Style:] on slide {slide.index} takes a filename, not a path: {name!r}. "
+                f"Plates are looked up inside {style_dir}."
+            )
+        suffix = candidate.suffix.lower()
+        if suffix not in STYLE_IMAGE_EXTENSIONS:
+            supported = ", ".join(sorted(STYLE_IMAGE_EXTENSIONS))
+            raise ValueError(
+                f"Unsupported style plate format '{suffix}' on slide {slide.index}: "
+                f"{name}. Supported: {supported}"
+            )
+        path = style_dir / name
+        if not path.is_file():
+            available = ", ".join(p.name for p in style_images_in_dir(style_dir))
+            raise ValueError(
+                f"Style plate not found for slide {slide.index}: {name}. "
+                f"Available in {style_dir}: {available or 'none'}"
+            )
+        if path not in resolved:
+            resolved.append(path)
+    return resolved
+
+
 def _parse_content_slides(
     outline: str,
     *,
-    page_filter: set[int] | None = None,
     require_at_least_one: bool = True,
 ) -> tuple[list[Slide], str | None]:
-    """Parse outline and return content slides with style slide removed."""
+    """Parse outline and return slides with the appendix slide removed.
+
+    Page filters are applied by the caller after roles are classified on this
+    full list, so a subset does not get cover or ending roles wrong.
+    """
     slides = parse_markdown(outline)
     if not slides:
         raise ValueError("No slides found in outline (no H2 headings)")
@@ -121,31 +305,44 @@ def _parse_content_slides(
         if require_at_least_one and not slides:
             raise ValueError("Only style slide found in outline")
 
-    if page_filter is not None:
-        slides = [slide for slide in slides if slide.index in page_filter]
-        if not slides:
-            raise ValueError(f"No slides match the page filter: {sorted(page_filter)}")
-
     return slides, global_style
 
 
 class SlideImageGenerator:
     """Orchestrates parallel image generation for PPT slides."""
 
-    def __init__(self, client: OpenRouterClient | VolcengineClient) -> None:
+    def __init__(
+        self,
+        client: OpenRouterClient | VolcengineClient,
+    ) -> None:
         self.client = client
 
     @staticmethod
-    def _build_full_outline_context(slides: list[Slide]) -> str:
-        """Build complete outline string for visual flow context."""
-        parts = ["# PRESENTATION OUTLINE (Context for visual flow):"]
-        for slide in slides:
-            parts.append(f"- Slide {slide.index}: {slide.title}")
-            content = slide.content.replace("\n", " ")
-            if len(content) > CONTENT_PREVIEW_LENGTH:
-                content = content[:CONTENT_PREVIEW_LENGTH] + "..."
-            parts.append(f"  Content: {content}")
-        return "\n".join(parts)
+    def _build_deck_map(slides: list[Slide], current_index: int) -> str:
+        """Title-only deck map plus the neighbours' visual focus for continuity."""
+        lines = ["# DECK MAP (context for visual flow; do not render):"]
+        position: int | None = None
+        for offset, slide in enumerate(slides):
+            marker = ""
+            if slide.index == current_index:
+                marker = " (this slide)"
+                position = offset
+            lines.append(f"- Slide {slide.index}: {slide.title}{marker}")
+
+        if position is not None:
+            neighbors: list[str] = []
+            for label, step in (("Previous", -1), ("Next", 1)):
+                other_position = position + step
+                if not 0 <= other_position < len(slides):
+                    continue
+                other = slides[other_position]
+                focus = _visual_focus(other.content) or "no visual direction"
+                neighbors.append(f"- {label}, slide {other.index} ({other.title}): {focus}")
+            if neighbors:
+                lines.append("")
+                lines.append("# NEIGHBOUR VISUALS (keep motifs and layout rhythm continuous):")
+                lines.extend(neighbors)
+        return "\n".join(lines)
 
     @staticmethod
     def _build_prompt(
@@ -153,54 +350,18 @@ class SlideImageGenerator:
         outline_context: str,
         global_style: str | None = None,
         with_style_reference: bool = False,
-        with_articles: bool = False,
         slide_reference_paths: list[Path] | None = None,
         style_reference_count: int = 0,
+        role: SlideRole | None = None,
     ) -> tuple[str, str]:
         """Build user and system prompts for current slide."""
         slide_reference_paths = slide_reference_paths or []
-        visual_tag = ""
-        visual_matches = list(re.finditer(r"\[Visual:\s*(.*?)\]", slide.content, re.IGNORECASE | re.DOTALL))
-        if visual_matches:
-            best_match = None
-            for match in reversed(visual_matches):
-                if match.group(1).strip():
-                    best_match = match
-                    break
-            if not best_match:
-                best_match = visual_matches[-1]
-            
-            visual_tag = best_match.group(1).strip()
-            start, end = best_match.span()
-            clean_content = slide.content[:start] + slide.content[end:]
-            clean_content = clean_content.strip()
-        else:
-            clean_content = slide.content
+        rest, visual_tag = _split_visual(slide.content)
+        clean_content = _clean_slide_content(rest)
 
-        clean_content = REFERENCE_TAG_PATTERN.sub("", clean_content)
-        
-        speech_matches = list(SPEECH_TAG_PATTERN.finditer(clean_content))
-        if speech_matches:
-            best_speech_match = None
-            for match in reversed(speech_matches):
-                if match.group(1).strip():
-                    best_speech_match = match
-                    break
-            if not best_speech_match:
-                best_speech_match = speech_matches[-1]
-            
-            start, end = best_speech_match.span()
-            clean_content = clean_content[:start] + clean_content[end:]
-            clean_content = clean_content.strip()
-
-        article_instruction = ""
-        if with_articles:
-            article_instruction = (
-                "\n# REFERENCE ARTICLES\n"
-                "Articles are attached as context. Use them to extract accurate numbers, named "
-                "examples, domain terminology, and visual metaphors for this slide. "
-                "Do not copy article prose verbatim — distill into slide-appropriate labels and visuals.\n"
-            )
+        role_block = ""
+        if role is not None:
+            role_block = f"\n# THIS SLIDE\nRole: {role}. {ROLE_BRIEFS[role]}\n"
 
         style_parts: list[str] = []
         if with_style_reference:
@@ -289,6 +450,19 @@ class SlideImageGenerator:
             else "- NO photorealistic human faces (use silhouettes or stylized avatars if needed)."
         )
 
+        layout_block = (
+            ""
+            if visual_tag
+            else """
+# LAYOUT (match to content type)
+- **Title Slide**: Bold centered title, strong background, one focal graphic. Use for cover/closing.
+- **Split Screen**: Content column + visual column (either side). Use for concepts, intros, case studies.
+- **Bento Grid**: 2–4 distinct blocks with icons or mini-visuals. Use for features, comparisons, multi-point summaries.
+- **Diagram Focus**: Large central diagram/pipeline/flowchart with concise labels. Use for processes, architecture, workflows.
+- **Statement**: One powerful sentence centered with supporting visual. Use for insights, transitions, takeaways.
+"""
+        )
+
         system_prompt = f"""You are an elite Presentation Designer. Generate a pixel-perfect 1920×1080 (16:9) slide image.
 
 # PRIMARY DIRECTIVE
@@ -301,19 +475,11 @@ If a `[Visual: ...]` instruction exists for this slide, treat it as the **author
 4. **Visual Hierarchy**: Title → key visual/diagram → supporting text, in that prominence order.
 5. **Separation**: Text never overlaps graphics, icons, or diagram elements.
 6. **Cohesion**: This slide must look like it belongs in the same deck as every other slide.
-
+{role_block}
 {outline_context}
-{article_instruction}
 {style_instruction}
 {reference_instruction}
-
-# LAYOUT (match to content type)
-- **Title Slide**: Bold centered title, strong background, one focal graphic. Use for cover/closing.
-- **Split Screen**: Content column + visual column (either side). Use for concepts, intros, case studies.
-- **Bento Grid**: 2–4 distinct blocks with icons or mini-visuals. Use for features, comparisons, multi-point summaries.
-- **Diagram Focus**: Large central diagram/pipeline/flowchart with concise labels. Use for processes, architecture, workflows.
-- **Statement**: One powerful sentence centered with supporting visual. Use for insights, transitions, takeaways.
-
+{layout_block}
 # VISUAL EXECUTION
 - **Show, don't tell**: The visual must communicate the slide's core idea before any text is read.
 - **Diagrams**: Clean boxes, arrows, labels. Show relationships, flow, or hierarchy — not decoration.
@@ -327,6 +493,8 @@ If a `[Visual: ...]` instruction exists for this slide, treat it as the **author
 - NO cropped or cut-off elements at any edge.
 - NO low-contrast text (must be readable at 3 m viewing distance).
 - NO watermarks, AI-generation stamps, or fake brand logos.
+- NO page totals: show at most this slide's own page number, only when the [Visual:] asks for it — never "N/total" or "N of M".
+- NO new facts: every number, name, and term on the slide matches the slide content exactly.
 {person_constraint}"""
 
         visual_instruction = f"\n**STRICT VISUAL INSTRUCTION**: {visual_tag}" if visual_tag else ""
@@ -337,6 +505,8 @@ If a `[Visual: ...]` instruction exists for this slide, treat it as the **author
 {clean_content}
 {visual_instruction}
 {reference_summary}
+**On-slide text**: Keep the slide title's wording exactly (a `Roadmap:` prefix may become a small eyebrow). Turn bullets into short labels of a few words. Never render markdown symbols (`**`, list dashes, backticks), takeaway prefixes such as `Core insight:`, or tag names such as `[Visual:]`.
+
 Render a single polished slide image. The visual composition must tell this slide's content at a glance; on-slide text supports and labels, it does not duplicate the visual.
 """
 
@@ -352,7 +522,7 @@ Render a single polished slide image. The visual composition must tell this slid
                 f"API returned: {successes}/{expected} succeeded, {len(failures)} failed"
             )
             for i, exc in enumerate(failures[:MAX_FAILURE_PREVIEW], 1):
-                print(f"  Failure {i}: {exc}")
+                print(f"  Failure {i}: {_format_generation_failure(exc)}")
             remaining = len(failures) - MAX_FAILURE_PREVIEW
             if remaining > 0:
                 print(f"  ... and {remaining} more")
@@ -367,25 +537,19 @@ Render a single polished slide image. The visual composition must tell this slid
         return path
 
     @staticmethod
-    def _create_output_pdfs(
+    def _create_output_pptx(
         saved_paths: list[Path],
         *,
-        slides_pdf_path: Path,
-        speech_pdf_path: Path,
+        pptx_path: Path,
         outline: str | None = None,
     ) -> None:
         if not saved_paths:
             return
-        create_pdf_from_images(saved_paths, slides_pdf_path)
-        print(f"Created {slides_pdf_path.name}")
-        if outline is None:
-            return
-        create_speech_pdf(
-            saved_paths,
-            slides_by_index_from_outline(outline),
-            speech_pdf_path,
+        slides_by_index = (
+            slides_by_index_from_outline(outline) if outline is not None else None
         )
-        print(f"Created {speech_pdf_path.name}")
+        create_pptx_from_images(saved_paths, pptx_path, slides_by_index)
+        print(f"Created {pptx_path.name}")
 
     def _make_image_save_callback(
         self,
@@ -409,16 +573,16 @@ Render a single polished slide image. The visual composition must tell this slid
         self,
         slide: Slide,
         *,
-        outline_context: str,
+        deck_slides: list[Slide],
+        role: SlideRole,
         global_style: str | None,
         with_style_reference: bool,
-        with_articles: bool,
         style_ref_images: list[bytes] | None,
         style_reference_count: int,
         outline_dir: Path | None,
-        article_pdfs: list[bytes] | None,
-        article_texts: list[str] | None,
         copy: int,
+        output_dir: Path,
+        style_reference_paths: list[Path] | None = None,
     ) -> list[ImagePrompt]:
         slide_reference_paths = resolve_reference_image_paths(slide, outline_dir)
         slide_reference_images = [path.read_bytes() for path in slide_reference_paths]
@@ -429,12 +593,20 @@ Render a single polished slide image. The visual composition must tell this slid
 
         user_prompt, system_prompt = self._build_prompt(
             slide,
-            outline_context,
+            self._build_deck_map(deck_slides, slide.index),
             global_style=global_style,
             with_style_reference=with_style_reference,
-            with_articles=with_articles,
             slide_reference_paths=slide_reference_paths,
             style_reference_count=style_reference_count,
+            role=role,
+        )
+        save_slide_prompt(
+            slide,
+            output_dir,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            style_reference_paths=style_reference_paths or [],
+            slide_reference_paths=slide_reference_paths,
         )
         ref_payload = combined_ref_images or None
         return [
@@ -442,8 +614,6 @@ Render a single polished slide image. The visual composition must tell this slid
                 user_prompt,
                 system_prompt,
                 ref_payload,
-                article_pdfs,
-                article_texts,
             )
             for _ in range(copy)
         ]
@@ -453,8 +623,7 @@ Render a single polished slide image. The visual composition must tell this slid
         prompts: list[ImagePrompt],
         paths: list[Path],
         *,
-        slides_pdf_path: Path,
-        speech_pdf_path: Path,
+        pptx_path: Path,
         expected: int,
         outline: str | None = None,
     ) -> tuple[list[Path | None], list[Path]]:
@@ -466,10 +635,9 @@ Render a single polished slide image. The visual composition must tell this slid
         )
         self._report_results(results, expected)
         saved_paths = self._ordered_saved_paths(saved_slots)
-        self._create_output_pdfs(
+        self._create_output_pptx(
             saved_paths,
-            slides_pdf_path=slides_pdf_path,
-            speech_pdf_path=speech_pdf_path,
+            pptx_path=pptx_path,
             outline=outline,
         )
         return saved_slots, saved_paths
@@ -479,8 +647,6 @@ Render a single polished slide image. The visual composition must tell this slid
         outline: str,
         copy: int,
         output_dir: Path,
-        article_pdfs: list[bytes] | None = None,
-        article_texts: list[str] | None = None,
         outline_dir: Path | None = None,
         *,
         work_dir: Path = DEFAULT_WORK_DIR,
@@ -495,8 +661,7 @@ Render a single polished slide image. The visual composition must tell this slid
             f"(parallel, max {self.client.max_concurrent} concurrent)..."
         )
 
-        outline_context = self._build_full_outline_context(slides)
-        with_articles = bool(article_pdfs or article_texts)
+        out_dir = Path(output_dir)
         slide_reference_paths = resolve_reference_image_paths(slide, outline_dir)
         if slide_reference_paths:
             print(
@@ -506,19 +671,17 @@ Render a single polished slide image. The visual composition must tell this slid
 
         prompts = self._build_slide_prompts(
             slide,
-            outline_context=outline_context,
+            deck_slides=slides,
+            role=classify_slide_role(slide, position=0, total=len(slides)),
             global_style=global_style,
             with_style_reference=False,
-            with_articles=with_articles,
             style_ref_images=None,
             style_reference_count=0,
             outline_dir=outline_dir,
-            article_pdfs=article_pdfs,
-            article_texts=article_texts,
             copy=copy,
+            output_dir=out_dir,
         )
 
-        out_dir = Path(output_dir)
         paths = [
             out_dir / f"slide_p{slide.index:02d}_v{i + 1:02d}.png"
             for i in range(copy)
@@ -527,8 +690,7 @@ Render a single polished slide image. The visual composition must tell this slid
         _, saved_paths = await self._generate_and_finalize(
             prompts,
             paths,
-            slides_pdf_path=presentation_slides_pdf_path(work_dir, ts),
-            speech_pdf_path=presentation_speech_pdf_path(work_dir, ts),
+            pptx_path=slides_pptx_path(work_dir, ts),
             expected=copy,
             outline=outline,
         )
@@ -540,23 +702,30 @@ Render a single polished slide image. The visual composition must tell this slid
         style_image_paths: list[Path],
         copy: int,
         output_dir: Path,
-        article_pdfs: list[bytes] | None = None,
-        article_texts: list[str] | None = None,
         page_filter: set[int] | None = None,
         outline_dir: Path | None = None,
         *,
+        style_dir: Path | None = None,
         work_dir: Path = DEFAULT_WORK_DIR,
         run_timestamp: str | None = None,
     ) -> dict[int, list[Path]]:
-        """Generate multiple image variants for all slides using style reference(s)."""
-        slides, global_style = _parse_content_slides(
+        """Generate multiple image variants for all slides using style reference(s).
+
+        A slide's ``[Style: filename]`` tag selects its plates from *style_dir*;
+        slides without one fall back to role-based routing over *style_image_paths*.
+        """
+        all_slides, global_style = _parse_content_slides(
             outline,
-            page_filter=page_filter,
             require_at_least_one=False,
         )
-        if not slides:
-            assert page_filter is not None
-            raise ValueError(f"No slides match the page filter: {sorted(page_filter)}")
+        if not all_slides:
+            raise ValueError("No slides found in outline (no H2 headings)")
+        position_by_index = {slide.index: position for position, slide in enumerate(all_slides)}
+        slides = all_slides
+        if page_filter is not None:
+            slides = [slide for slide in all_slides if slide.index in page_filter]
+            if not slides:
+                raise ValueError(f"No slides match the page filter: {sorted(page_filter)}")
 
         total = len(slides) * copy
         slide_titles = [slide.title for slide in slides]
@@ -571,19 +740,26 @@ Render a single polished slide image. The visual composition must tell this slid
         )
 
         style_bytes_by_path = {path: path.read_bytes() for path in style_image_paths}
-        outline_context = self._build_full_outline_context(slides)
-        with_articles = bool(article_pdfs or article_texts)
+        out_dir = Path(output_dir)
 
         reference_summaries: list[str] = []
         style_summaries: list[str] = []
         all_prompts: list[ImagePrompt] = []
-        total_slides = len(slides)
-        for position, slide in enumerate(slides):
+        total_slides = len(all_slides)
+        for slide in slides:
+            position = position_by_index[slide.index]
             role = classify_slide_role(slide, position=position, total=total_slides)
-            role_style_paths = select_style_paths_for_role(role, style_image_paths)
-            style_ref_images = [style_bytes_by_path[path] for path in role_style_paths]
+            declared_style_paths = resolve_style_plate_paths(slide, style_dir)
+            role_style_paths = declared_style_paths or select_style_paths_for_role(
+                role, style_image_paths
+            )
+            style_ref_images = [
+                style_bytes_by_path.setdefault(path, path.read_bytes())
+                for path in role_style_paths
+            ]
+            source = "outline" if declared_style_paths else role
             style_summaries.append(
-                f"slide {slide.index} ({role}): "
+                f"slide {slide.index} ({source}): "
                 + ", ".join(path.name for path in role_style_paths)
             )
             slide_reference_paths = resolve_reference_image_paths(slide, outline_dir)
@@ -595,24 +771,23 @@ Render a single polished slide image. The visual composition must tell this slid
             all_prompts.extend(
                 self._build_slide_prompts(
                     slide,
-                    outline_context=outline_context,
+                    deck_slides=all_slides,
+                    role=role,
                     global_style=global_style,
                     with_style_reference=True,
-                    with_articles=with_articles,
                     style_ref_images=style_ref_images,
                     style_reference_count=len(style_ref_images),
                     outline_dir=outline_dir,
-                    article_pdfs=article_pdfs,
-                    article_texts=article_texts,
                     copy=copy,
+                    output_dir=out_dir,
+                    style_reference_paths=role_style_paths,
                 )
             )
 
-        print("Style plates by slide role: " + "; ".join(style_summaries))
+        print("Style plates by slide: " + "; ".join(style_summaries))
         if reference_summaries:
             print("Using slide reference(s): " + "; ".join(reference_summaries))
 
-        out_dir = Path(output_dir)
         paths = [
             out_dir / f"slide_p{slide.index:02d}_v{v + 1:02d}.png"
             for slide in slides
@@ -622,8 +797,7 @@ Render a single polished slide image. The visual composition must tell this slid
         saved_slots, _ = await self._generate_and_finalize(
             all_prompts,
             paths,
-            slides_pdf_path=presentation_slides_pdf_path(work_dir, ts),
-            speech_pdf_path=presentation_speech_pdf_path(work_dir, ts),
+            pptx_path=slides_pptx_path(work_dir, ts),
             expected=total,
             outline=outline,
         )

@@ -6,7 +6,6 @@ import asyncio
 import base64
 import json
 import logging
-import re
 from collections.abc import Awaitable, Callable
 from typing import Any, Final, NamedTuple, Union
 
@@ -41,27 +40,32 @@ DEFAULT_RETRY_ATTEMPTS: Final[int] = 10
 DEFAULT_RETRY_WAIT_INITIAL: Final[float] = 1.0
 DEFAULT_RETRY_WAIT_MAX: Final[float] = 60.0
 RETRYABLE_HTTP_STATUS_CODES: Final[frozenset[int]] = frozenset({408, 409, 425, 429})
-DATA_URL_PATTERN: Final[re.Pattern] = re.compile(r"data:image/[^;]+;base64,(.+)")
-
-# OpenRouter image_config (see https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
+# OpenRouter unified Image API (see https://openrouter.ai/docs/guides/overview/multimodal/image-generation).
+# Image-only models such as openai/gpt-image-* are served from POST /images, not /chat/completions.
 SLIDE_ASPECT_RATIO: Final[str] = "16:9"
 SLIDE_IMAGE_SIZE: Final[str] = "2K"
 STYLE_IMAGE_SIZE: Final[str] = "1K"
 STYLE_IMAGE_PIXEL_SIZE: Final[tuple[int, int]] = (1280, 720)
+# OpenAI image models (gpt-image-*) reject prompts over 32k characters.
+OPENROUTER_IMAGE_PROMPT_MAX_CHARS: Final[int] = 32_000
+ARTICLE_CONTEXT_MAX_CHARS: Final[int] = 4_000
+PROMPT_TRUNCATE_MARK: Final[str] = "\n\n[truncated]"
+# OpenAI image models (gpt-image-*) reject `resolution` and take `quality` instead.
+QUALITY_FOR_IMAGE_SIZE: Final[dict[str, str]] = {
+    "512": "low",
+    "1K": "medium",
+    "2K": "high",
+    "4K": "xhigh",
+}
+DEFAULT_IMAGE_QUALITY: Final[str] = "high"
 
 
 class ImagePrompt(NamedTuple):
-    """Prompt bundle for parallel image generation.
-
-    ``article_pdfs`` is reserved for future PDF context extraction and is
-    currently unused by both image clients.
-    """
+    """Prompt bundle for parallel image generation."""
 
     prompt: str
     system_prompt: str | None
     reference_images: list[bytes] | None
-    article_pdfs: list[bytes] | None
-    article_texts: list[str] | None
 
 
 class TextPrompt(NamedTuple):
@@ -281,15 +285,95 @@ def _image_bytes_to_data_url(image_bytes: bytes) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-def _article_context_from_prompt(prompt: ImagePrompt) -> str | None:
-    """Combine article texts into assistant context (PDFs not yet supported)."""
-    if prompt.article_texts:
-        return "\n\n---\n\n".join(prompt.article_texts)
-    return None
+def _clip_text(text: str, max_chars: int) -> str:
+    """Trim *text* to *max_chars*, marking the cut when anything is dropped."""
+    if max_chars <= 0:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    mark = PROMPT_TRUNCATE_MARK
+    if max_chars <= len(mark):
+        return text[:max_chars]
+    return text[: max_chars - len(mark)].rstrip() + mark
 
 
-def _coerce_image_prompt(prompt: ImagePrompt | tuple[str, str | None, list[bytes] | None, list[bytes] | None, list[str] | None]) -> ImagePrompt:
-    """Accept legacy 5-tuples or ImagePrompt instances."""
+def _merge_prompt_parts(
+    prompt: str,
+    system_prompt: str | None,
+    *,
+    max_chars: int | None = None,
+) -> str:
+    """Flatten a prompt bundle for endpoints that take a single prompt string.
+
+    When *max_chars* is set and the bundle is too long, clip the system prompt.
+    The per-slide user prompt is kept intact unless it alone exceeds the cap.
+    """
+
+    def join(*parts: str) -> str:
+        return "\n\n".join(part for part in parts if part)
+
+    system = (system_prompt or "").strip()
+    user = (prompt or "").strip()
+    merged = join(system, user)
+    if max_chars is None or len(merged) <= max_chars:
+        return merged
+
+    if not user:
+        return _clip_text(system, max_chars)
+    system_budget = max_chars - len(user) - (2 if system else 0)
+    if system_budget < 200:
+        return _clip_text(user, max_chars)
+    return join(_clip_text(system, system_budget), user)
+
+
+def _http_error_detail(response: httpx.Response) -> str:
+    """Pull a short OpenRouter/HTTP error message out of a failed response."""
+    detail = f"HTTP {response.status_code}"
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            err = body.get("error")
+            if isinstance(err, dict) and err.get("message") is not None:
+                return f"{detail}: {err['message']}"
+            if isinstance(err, str) and err.strip():
+                return f"{detail}: {err.strip()}"
+    except (ValueError, TypeError):
+        pass
+    text = (response.text or "").strip()
+    if text:
+        tail = text if len(text) <= 200 else text[:200] + "…"
+        return f"{detail} ({tail})"
+    return detail
+
+
+def _raise_for_http_status(response: httpx.Response) -> None:
+    """Like ``raise_for_status``, but include the API error body in the message."""
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise httpx.HTTPStatusError(
+            f"{exc}. {_http_error_detail(response)}",
+            request=exc.request,
+            response=exc.response,
+        ) from None
+
+
+def _supported_parameter_names(payload: dict[str, Any]) -> frozenset[str]:
+    """Union of ``supported_parameters`` keys across Image API endpoint records."""
+    names: set[str] = set()
+    for endpoint in payload.get("endpoints") or []:
+        if not isinstance(endpoint, dict):
+            continue
+        params = endpoint.get("supported_parameters") or {}
+        if isinstance(params, dict):
+            names.update(str(key) for key in params)
+    return frozenset(names)
+
+
+def _coerce_image_prompt(
+    prompt: ImagePrompt | tuple[str, str | None, list[bytes] | None],
+) -> ImagePrompt:
+    """Accept a 3-tuple or an ImagePrompt instance."""
     if isinstance(prompt, ImagePrompt):
         return prompt
     return ImagePrompt(*prompt)
@@ -323,7 +407,6 @@ class _BaseImageClient:
         prompt: str,
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
-        assistant_context: str | None = None,
         *,
         image_size: str | None = None,
     ) -> bytes:
@@ -341,13 +424,11 @@ class _BaseImageClient:
 
         async def _generate_one(client: httpx.AsyncClient, raw_prompt: ImagePrompt) -> bytes:
             prompt = _coerce_image_prompt(raw_prompt)
-            context = _article_context_from_prompt(prompt)
             return await self._generate_single_image(
                 client,
                 prompt.prompt,
                 prompt.system_prompt,
                 prompt.reference_images,
-                context,
                 image_size=image_size,
             )
 
@@ -374,6 +455,7 @@ class OpenRouterClient(_BaseImageClient):
         max_concurrent: int = DEFAULT_MAX_CONCURRENT,
         management_api_key: str | None = None,
         min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
+        supported_parameters: frozenset[str] | None = None,
     ) -> None:
         super().__init__(
             max_concurrent=max_concurrent,
@@ -383,22 +465,20 @@ class OpenRouterClient(_BaseImageClient):
         self.api_key = api_key
         self._management_api_key = (management_api_key or "").strip() or None
         self._model = model
+        self._supported_parameters = supported_parameters
+        self._capabilities_lock: asyncio.Lock | None = None
 
     def _build_messages(
         self,
         prompt: str,
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
-        assistant_context: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build messages array for the API request."""
         messages: list[dict[str, Any]] = []
 
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-
-        if assistant_context:
-            messages.append({"role": "assistant", "content": assistant_context})
 
         if not reference_images:
             messages.append({"role": "user", "content": prompt})
@@ -436,56 +516,98 @@ class OpenRouterClient(_BaseImageClient):
             raise ValueError(f"Failed to extract text from response: {e}") from e
 
     def _extract_image(self, data: dict[str, Any]) -> bytes:
-        """Extract image bytes from OpenRouter chat completion response.
+        """Extract image bytes from an OpenRouter Image API response.
 
         Raises:
             ValueError: If the response format is invalid or image data is missing.
         """
         try:
-            choices = data.get("choices")
-            if not choices:
-                raise ValueError("No choices in response")
-
-            message = choices[0].get("message")
-            if not message:
-                raise ValueError("No message in first choice")
-
-            images = message.get("images")
+            images = data.get("data")
             if not images:
                 raise ValueError("No images in response")
 
-            first_image = images[0]
-            url = (
-                first_image.get("image_url", {}).get("url")
-                or first_image.get("imageUrl", {}).get("url")
-            )
-            if not url:
-                raise ValueError("No image URL in first image")
+            b64 = images[0].get("b64_json")
+            if not b64:
+                raise ValueError("No b64_json payload in first image")
 
-            # Parse data URL: data:image/png;base64,<payload>
-            match = DATA_URL_PATTERN.match(url)
-            if not match:
-                raise ValueError(f"Image URL is not a valid base64 data URL: {url[:50]}...")
-
-            return base64.standard_b64decode(match.group(1))
+            return base64.standard_b64decode(b64)
         except (KeyError, IndexError, TypeError) as e:
             raise ValueError(f"Failed to extract image from response: {e}") from e
 
     def _credits_http_error_detail(self, response: httpx.Response) -> str:
-        detail = f"HTTP {response.status_code}"
-        try:
-            body = response.json()
-            if isinstance(body, dict):
-                err = body.get("error")
-                if isinstance(err, dict) and err.get("message") is not None:
-                    return f"{detail}: {err['message']}"
-        except (ValueError, TypeError):
-            pass
-        text = (response.text or "").strip()
-        if text:
-            tail = text if len(text) <= 200 else text[:200] + "…"
-            return f"{detail} ({tail})"
-        return detail
+        return _http_error_detail(response)
+
+    def _build_image_payload(
+        self,
+        prompt: str,
+        system_prompt: str | None,
+        reference_images: list[bytes] | None,
+        *,
+        image_size: str | None,
+        supported: frozenset[str] | None,
+    ) -> dict[str, Any]:
+        """Build a POST /images body using only parameters the model accepts.
+
+        OpenRouter 400s on unsupported fields. ``resolution`` is the common
+        trap: Gemini/Seedream accept ``1K``/``2K``/``4K``, but OpenAI
+        ``gpt-image-*`` models take ``quality`` instead. When capabilities
+        are unknown, omit ``resolution`` rather than guess.
+        """
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "prompt": _merge_prompt_parts(
+                prompt,
+                system_prompt,
+                max_chars=OPENROUTER_IMAGE_PROMPT_MAX_CHARS,
+            ),
+        }
+        if supported is None or "aspect_ratio" in supported:
+            payload["aspect_ratio"] = SLIDE_ASPECT_RATIO
+        size = image_size or SLIDE_IMAGE_SIZE
+        if supported is not None and "resolution" in supported:
+            payload["resolution"] = size
+        elif supported is not None and "quality" in supported:
+            payload["quality"] = QUALITY_FOR_IMAGE_SIZE.get(size, DEFAULT_IMAGE_QUALITY)
+        if supported is not None and "n" in supported:
+            payload["n"] = 1
+        if reference_images and (supported is None or "input_references" in supported):
+            payload["input_references"] = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": _image_bytes_to_data_url(image_bytes)},
+                }
+                for image_bytes in reference_images
+            ]
+        return payload
+
+    async def _resolve_supported_parameters(
+        self, client: httpx.AsyncClient
+    ) -> frozenset[str] | None:
+        """Return cached Image API parameter names, fetching once if needed."""
+        if self._supported_parameters is not None:
+            return self._supported_parameters
+        if self._capabilities_lock is None:
+            self._capabilities_lock = asyncio.Lock()
+        async with self._capabilities_lock:
+            if self._supported_parameters is not None:
+                return self._supported_parameters
+            try:
+                response = await client.get(
+                    f"{self.BASE_URL}/images/models/{self._model}/endpoints",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                response.raise_for_status()
+                names = _supported_parameter_names(response.json())
+            except Exception as exc:
+                logger.warning(
+                    "Could not load Image API capabilities for %s; "
+                    "omitting resolution to avoid 400s: %s",
+                    self._model,
+                    exc,
+                )
+                return None
+            self._supported_parameters = names
+            return names
 
     async def fetch_credits(self) -> CreditsFetchOutcome:
         """GET ``/credits`` — purchased vs used totals (remaining is their difference).
@@ -539,33 +661,29 @@ class OpenRouterClient(_BaseImageClient):
         prompt: str,
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
-        assistant_context: str | None = None,
         *,
         image_size: str | None = None,
     ) -> bytes:
-        """Generate a single image with retry logic."""
+        """Generate a single image via the unified Image API, with retry logic."""
 
         @_image_api_retry()
         async def _do_request() -> bytes:
             await self._rate_limiter.acquire()
             async with self.semaphore:
-                payload = {
-                    "model": self._model,
-                    "messages": self._build_messages(
-                        prompt, system_prompt, reference_images, assistant_context
-                    ),
-                    "modalities": ["image", "text"],
-                    "image_config": {
-                        "aspect_ratio": SLIDE_ASPECT_RATIO,
-                        "image_size": image_size or SLIDE_IMAGE_SIZE,
-                    },
-                }
+                supported = await self._resolve_supported_parameters(client)
+                payload = self._build_image_payload(
+                    prompt,
+                    system_prompt,
+                    reference_images,
+                    image_size=image_size,
+                    supported=supported,
+                )
                 response = await client.post(
-                    f"{self.BASE_URL}/chat/completions",
+                    f"{self.BASE_URL}/images",
                     json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}"},
                 )
-                response.raise_for_status()
+                _raise_for_http_status(response)
                 return self._extract_image(response.json())
 
         return await _do_request()
@@ -696,19 +814,7 @@ class VolcengineClient(_BaseImageClient):
         self._response_format = rf
         self._watermark = watermark
 
-    @staticmethod
-    def _merge_prompt(
-        prompt: str,
-        system_prompt: str | None,
-        assistant_context: str | None,
-    ) -> str:
-        parts: list[str] = []
-        if system_prompt:
-            parts.append(system_prompt.strip())
-        if assistant_context:
-            parts.append(assistant_context.strip())
-        parts.append(prompt.strip())
-        return "\n\n".join(p for p in parts if p)
+    _merge_prompt = staticmethod(_merge_prompt_parts)
 
     @staticmethod
     def _data_url_for_image(image_bytes: bytes) -> str:
@@ -738,7 +844,6 @@ class VolcengineClient(_BaseImageClient):
         prompt: str,
         system_prompt: str | None = None,
         reference_images: list[bytes] | None = None,
-        assistant_context: str | None = None,
         *,
         image_size: str | None = None,
     ) -> bytes:
@@ -746,9 +851,7 @@ class VolcengineClient(_BaseImageClient):
         async def _do_request() -> bytes:
             await self._rate_limiter.acquire()
             async with self.semaphore:
-                merged = self._merge_prompt(
-                    prompt, system_prompt, assistant_context
-                )
+                merged = self._merge_prompt(prompt, system_prompt)
                 payload: dict[str, Any] = {
                     "model": self._model,
                     "prompt": merged,

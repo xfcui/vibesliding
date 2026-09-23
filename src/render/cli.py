@@ -3,107 +3,39 @@
 from __future__ import annotations
 
 import asyncio
-import re
-from collections.abc import Callable
 from pathlib import Path
 from typing import Final, cast
 
 import click
+from click.core import ParameterSource
 from dotenv import load_dotenv
 
 from src.render.gen import SlideImageGenerator
 from src.core.api_client import OpenRouterClient
 from src.core.client_factory import (
     create_image_client,
-    create_text_client,
     normalize_provider,
 )
 from src.core.config import load_config
-from src.core.export import rebuild_combined_pdf, rebuild_speech_pdf
+from src.core.export import rebuild_combined_pptx
 from src.core.paths import (
-    DEFAULT_OUTLINE_PATH,
+    DEFAULT_SCRIPT_PATH,
+    DEFAULT_STYLE_DIR,
     DEFAULT_WORK_DIR,
     backup_outline_to_image_dir,
     default_output_dir,
-    default_style_glob,
+    style_dir as project_style_dir,
+    style_images_in_dir,
     timestamp_from_image_dir,
     timestamp_slug,
 )
-from src.core.resolve import PathResolveError, clean_path_pattern, resolve_patterns
+from src.core.resolve import has_glob_chars
 
 load_dotenv()
 
-SUPPORTED_ARTICLE_EXTENSIONS: Final[frozenset[str]] = frozenset(
-    {".pdf", ".md", ".markdown"}
-)
 SUPPORTED_STYLE_EXTENSIONS: Final[frozenset[str]] = frozenset(
     {".png", ".jpg", ".jpeg", ".webp"}
 )
-ARTICLE_TAG_PATTERN: Final[re.Pattern] = re.compile(
-    r"\[(?:Articles?|Text\s+References?|Source\s+References?)\s*:\s*(.*?)\]",
-    re.IGNORECASE | re.DOTALL,
-)
-
-
-def _resolve_error_builders(
-    *,
-    kind: str,
-    supported_extensions: frozenset[str],
-) -> tuple[
-    Callable[[str], str],
-    Callable[[str], str],
-    Callable[[Path], str],
-    Callable[[Path, str], str],
-]:
-    ext_list = ", ".join(sorted(supported_extensions))
-
-    def glob_miss(pattern: str) -> str:
-        return f"No files found matching pattern: {pattern}"
-
-    def file_miss(pattern: str) -> str:
-        return f"{kind} file not found: {pattern}"
-
-    def not_file(path: Path) -> str:
-        return f"Not a file: {path}"
-
-    def bad_extension(path: Path, suffix: str) -> str:
-        return (
-            f"Unsupported {kind.lower()} format '{suffix}' for {path.name}. "
-            f"Supported: {ext_list}"
-        )
-
-    return glob_miss, file_miss, not_file, bad_extension
-
-
-def _expand_paths(
-    patterns: list[str],
-    *,
-    supported_extensions: frozenset[str],
-    kind: str,
-    base_dir: Path | None = None,
-    include_parent_base: bool = False,
-    sort: bool = False,
-    normalize: Callable[[str], str] = str.strip,
-) -> list[Path]:
-    glob_miss, file_miss, not_file, bad_extension = _resolve_error_builders(
-        kind=kind,
-        supported_extensions=supported_extensions,
-    )
-    try:
-        return resolve_patterns(
-            patterns,
-            supported_extensions=supported_extensions,
-            base_dir=base_dir,
-            include_parent_base=include_parent_base,
-            sort=sort,
-            normalize=normalize,
-            glob_miss_error=glob_miss,
-            file_miss_error=file_miss,
-            not_file_error=not_file,
-            bad_extension_error=bad_extension,
-        )
-    except PathResolveError as exc:
-        raise click.UsageError(exc.message) from exc
 
 
 def parse_page_spec(page_spec: str | None) -> set[int] | None:
@@ -146,44 +78,9 @@ def parse_page_spec(page_spec: str | None) -> set[int] | None:
     return pages if pages else None
 
 
-def extract_article_patterns_from_outline(outline_text: str) -> list[str]:
-    """Extract article reference path/glob patterns declared in the outline."""
-    patterns: list[str] = []
-    for match in ARTICLE_TAG_PATTERN.finditer(outline_text):
-        raw = match.group(1).replace("\n", ",")
-        patterns.extend(
-            clean_path_pattern(segment)
-            for segment in raw.split(",")
-            if clean_path_pattern(segment)
-        )
-    return patterns
-
-
-def expand_article_paths(
-    patterns: list[str],
-    base_dir: Path | None = None,
-) -> list[Path]:
-    """Expand glob patterns and validate article file paths."""
-    return _expand_paths(
-        patterns,
-        supported_extensions=SUPPORTED_ARTICLE_EXTENSIONS,
-        kind="Article",
-        base_dir=base_dir,
-        include_parent_base=True,
-    )
-
-
-def expand_style_paths(patterns: list[str]) -> list[Path]:
-    """Expand glob patterns into sorted, unique image paths for style references."""
-    if not patterns:
-        return []
-    return _expand_paths(
-        patterns,
-        supported_extensions=SUPPORTED_STYLE_EXTENSIONS,
-        kind="Style image",
-        sort=True,
-        normalize=str.strip,
-    )
+def collect_style_images(style_dir: Path) -> list[Path]:
+    """Return every style plate inside *style_dir*, sorted by filename."""
+    return style_images_in_dir(style_dir)
 
 
 async def _echo_openrouter_account_credits(client: OpenRouterClient) -> None:
@@ -223,7 +120,7 @@ def _parse_page_spec_or_usage(page: str | None) -> set[int] | None:
         raise click.UsageError(str(exc)) from exc
 
 
-def _run_pdf_only(
+def _run_pptx_only(
     output: Path,
     *,
     work_dir: Path,
@@ -234,39 +131,27 @@ def _run_pdf_only(
     page_numbers = _parse_page_spec_or_usage(page)
     variant_numbers = _parse_page_spec_or_usage(variant)
     ts = timestamp_from_image_dir(output) or timestamp_slug()
+    outline_text: str | None = None
+    if outline is not None and outline.is_file():
+        outline_text = outline.read_text(encoding="utf-8")
+    else:
+        click.echo(
+            "Speaker notes skipped (script not found; pass --script to include [Speech:] notes).",
+            err=True,
+        )
     try:
-        pdf_path, image_count = rebuild_combined_pdf(
+        pptx_path, image_count = rebuild_combined_pptx(
             output,
-            pdf_dir=work_dir,
+            outline_text,
+            pptx_dir=work_dir,
             timestamp=ts,
             page_filter=page_numbers,
             variant_filter=variant_numbers,
         )
     except Exception as exc:
-        raise click.ClickException(f"Failed to rebuild combined PDF: {exc}") from exc
+        raise click.ClickException(f"Failed to rebuild PPTX: {exc}") from exc
     click.echo(
-        f"Created {pdf_path.name} ({image_count} page(s)) in {work_dir.resolve()}"
-    )
-
-    if outline is None or not outline.is_file():
-        click.echo(
-            "Skipped presentation_speech PDF (outline not found; pass --outline to rebuild speech PDF).",
-            err=True,
-        )
-        return
-
-    try:
-        speech_path, speech_count = rebuild_speech_pdf(
-            output,
-            outline.read_text(encoding="utf-8"),
-            pdf_dir=work_dir,
-            timestamp=ts,
-            page_filter=page_numbers,
-        )
-    except Exception as exc:
-        raise click.ClickException(f"Failed to rebuild speech PDF: {exc}") from exc
-    click.echo(
-        f"Created {speech_path.name} ({speech_count} page(s)) in {work_dir.resolve()}"
+        f"Created {pptx_path.name} ({image_count} slide(s)) in {work_dir.resolve()}"
     )
 
 
@@ -286,13 +171,7 @@ def _run_balance_only(
     if config.provider != "openrouter":
         raise click.UsageError("--balance-only requires provider openrouter.")
     assert config.api_key is not None
-    or_client = create_text_client(
-        api_key=config.api_key,
-        proxy=config.proxy,
-        model=config.model,
-        max_concurrent=config.max_concurrent,
-        management_api_key=config.openrouter_management_api_key,
-    )
+    or_client = create_image_client(config)
 
     async def _balance() -> None:
         await _echo_openrouter_account_credits(or_client)
@@ -303,87 +182,81 @@ def _run_balance_only(
         raise click.ClickException(f"Failed to fetch balance: {exc}") from exc
 
 
-def _load_article_content(
-    article_patterns: list[str],
-    outline: Path,
-) -> tuple[list[bytes], list[str], list[Path]]:
-    article_pdfs: list[bytes] = []
-    article_texts: list[str] = []
-    article_paths = expand_article_paths(article_patterns, base_dir=outline.parent)
-    for path in article_paths:
-        suffix = path.suffix.lower()
-        try:
-            if suffix == ".pdf":
-                article_pdfs.append(path.read_bytes())
-            else:
-                article_texts.append(path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise click.ClickException(f"Failed to read article file {path.resolve()}: {exc}") from exc
-    return article_pdfs, article_texts, article_paths
+def _resolve_style_paths(style_dir: Path, *, explicit: bool) -> list[Path] | None:
+    """Collect style plates from *style_dir*; None means first-slide-only mode.
 
+    *explicit* marks a user-supplied ``--style``: a bad directory is then an error
+    rather than a silent fallback, since the user clearly meant to style the deck.
+    """
+    if has_glob_chars(str(style_dir)):
+        raise click.UsageError(
+            f"--style takes a directory, not a glob: {style_dir}. "
+            f"Use --style {style_dir.parent if str(style_dir.parent) != '.' else DEFAULT_STYLE_DIR}"
+        )
+    if style_dir.is_file():
+        raise click.UsageError(
+            f"--style takes a directory, not a file: {style_dir}. "
+            f"Use --style {style_dir.parent}"
+        )
+    if not style_dir.is_dir():
+        if explicit:
+            raise click.UsageError(f"Style directory not found: {style_dir.resolve()}")
+        return None
 
-def _resolve_style_paths(
-    style: tuple[str, ...],
-    work_dir: Path,
-) -> list[Path] | None:
-    patterns = list(style) if style else [default_style_glob()]
-    style_paths = expand_style_paths(patterns)
+    style_paths = collect_style_images(style_dir)
+    if not style_paths and explicit:
+        supported = ", ".join(sorted(SUPPORTED_STYLE_EXTENSIONS))
+        raise click.UsageError(
+            f"No style images in {style_dir.resolve()} (supported: {supported}). "
+            "Generate them with: python3 -m src.design.cli"
+        )
     return style_paths or None
 
 
 def _echo_generation_summary(
     *,
-    outline: Path,
+    script: Path,
     copy: int,
     page_numbers: set[int] | None,
-    article_paths: list[Path],
-    article_pdfs: list[bytes],
-    article_texts: list[str],
+    style_dir: Path,
     style_paths: list[Path] | None,
     output: Path,
     outline_backup: Path,
     provider: str,
 ) -> None:
-    info_parts = [f"Outline: {outline}", f"copy: {copy}"]
+    info_parts = [f"Script: {script}", f"copy: {copy}"]
     if page_numbers is not None:
         pages_str = ",".join(map(str, sorted(page_numbers)))
         info_parts.append(f"Pages: {pages_str}")
-    if article_paths:
-        types: list[str] = []
-        if article_pdfs:
-            types.append(f"{len(article_pdfs)} PDF")
-        if article_texts:
-            types.append(f"{len(article_texts)} Markdown")
-        info_parts.append(f"Articles: {len(article_paths)} files ({', '.join(types)})")
     if style_paths is not None:
         names = ", ".join(p.name for p in style_paths)
-        info_parts.append(f"Style ({len(style_paths)}): {names}")
+        info_parts.append(f"Style dir: {style_dir} ({len(style_paths)}): {names}")
     output_str = str(output.resolve())
     if style_paths is None:
         output_str += " (first slide only)"
     info_parts.append(f"Output: {output_str}")
-    info_parts.append(f"Outline backup: {outline_backup.resolve()}")
+    info_parts.append(f"Script backup: {outline_backup.resolve()}")
     info_parts.append(f"Provider: {provider}")
     click.echo("  |  ".join(info_parts))
 
 
 def _run_generation(
     *,
-    outline: Path,
+    script: Path,
     work_dir: Path,
-    style: tuple[str, ...],
+    style_dir: Path,
+    style_explicit: bool,
     copy: int,
     output: Path | None,
-    article: tuple[str, ...],
     api_key: str | None,
     page: str | None,
     proxy: str | None,
     provider: str | None,
     no_balance: bool,
 ) -> None:
-    style_paths = _resolve_style_paths(style, work_dir)
+    style_paths = _resolve_style_paths(style_dir, explicit=style_explicit)
     run_ts = timestamp_slug()
-    out_dir = output or default_output_dir(run_ts)
+    out_dir = output or default_output_dir(work_dir, run_ts)
     config = load_config(
         output_dir=out_dir,
         api_key_override=api_key,
@@ -393,31 +266,18 @@ def _run_generation(
     config.validate()
     page_numbers = _parse_page_spec_or_usage(page)
 
-    outline_text = outline.read_text(encoding="utf-8")
+    script_text = script.read_text(encoding="utf-8")
     outline_backup = backup_outline_to_image_dir(
-        outline,
+        script,
         out_dir,
-        text=outline_text,
+        text=script_text,
     )
-    outline_article_patterns = extract_article_patterns_from_outline(outline_text)
-    article_patterns = list(article or ()) + outline_article_patterns
-
-    article_pdfs: list[bytes] = []
-    article_texts: list[str] = []
-    article_paths: list[Path] = []
-    if article_patterns:
-        article_pdfs, article_texts, article_paths = _load_article_content(
-            article_patterns,
-            outline,
-        )
 
     _echo_generation_summary(
-        outline=outline,
+        script=script,
         copy=copy,
         page_numbers=page_numbers,
-        article_paths=article_paths,
-        article_pdfs=article_pdfs,
-        article_texts=article_texts,
+        style_dir=style_dir,
         style_paths=style_paths,
         output=out_dir,
         outline_backup=outline_backup,
@@ -436,36 +296,33 @@ def _run_generation(
                     )
                     return
                 paths = await generator.generate_first_slide_images(
-                    outline=outline_text,
+                    outline=script_text,
                     copy=copy,
                     output_dir=out_dir,
-                    article_pdfs=article_pdfs or None,
-                    article_texts=article_texts or None,
-                    outline_dir=outline.parent,
+                    outline_dir=script.parent,
                     work_dir=work_dir,
                     run_timestamp=run_ts,
                 )
                 click.echo(
                     f"Done. Saved {len(paths)} image(s) to {out_dir.resolve()} "
-                    f"and PDFs to {work_dir.resolve()}"
+                    f"and PPTX to {work_dir.resolve()}"
                 )
             else:
                 by_slide = await generator.generate_all_slide_images(
-                    outline=outline_text,
+                    outline=script_text,
                     style_image_paths=style_paths,
                     copy=copy,
                     output_dir=out_dir,
-                    article_pdfs=article_pdfs or None,
-                    article_texts=article_texts or None,
                     page_filter=page_numbers,
-                    outline_dir=outline.parent,
+                    outline_dir=script.parent,
+                    style_dir=style_dir,
                     work_dir=work_dir,
                     run_timestamp=run_ts,
                 )
                 total = sum(len(paths) for paths in by_slide.values())
                 click.echo(
                     f"Done. Saved {total} image(s) to {out_dir.resolve()} "
-                    f"and PDFs to {work_dir.resolve()}"
+                    f"and PPTX to {work_dir.resolve()}"
                 )
         finally:
             if config.provider == "openrouter" and not no_balance:
@@ -484,24 +341,26 @@ def _run_generation(
     type=click.Path(path_type=Path),
     default=DEFAULT_WORK_DIR,
     show_default=True,
-    help="Work directory containing outline and style references.",
+    help="Work directory containing the script and style plates.",
 )
 @click.option(
-    "--outline",
-    "outline_path",
+    "--script",
+    "script_path",
     type=click.Path(path_type=Path),
-    default=DEFAULT_OUTLINE_PATH,
+    default=DEFAULT_SCRIPT_PATH,
     show_default=True,
-    help="Outline markdown file (default: work/outline_16.md).",
+    help="Script markdown file (default: work/script_16.md).",
 )
 @click.option(
     "--style",
-    type=str,
-    multiple=True,
-    default=(),
+    "style_dir",
+    type=click.Path(path_type=Path),
+    default=DEFAULT_STYLE_DIR,
+    show_default=True,
     help=(
-        "Style reference image path(s) or glob; repeatable "
-        "(default: style/*.png). If no images resolve, only the first slide is generated."
+        "Directory holding the style images. Slides pick images from here with "
+        "[Style: filename]; untagged slides are routed by slide role. "
+        "If the default directory has no images, only the first slide is generated."
     ),
 )
 @click.option(
@@ -515,14 +374,7 @@ def _run_generation(
     "--output",
     type=click.Path(path_type=Path),
     default=None,
-    help="Output directory for slide PNGs. Default: work/image_YYYYMMDD_HHMMSS/. PDFs go to work/.",
-)
-@click.option(
-    "--article",
-    type=str,
-    multiple=True,
-    default=None,
-    help="Path(s) or glob pattern(s) for article files (.pdf, .md, .markdown).",
+    help="Output directory for slide PNGs. Default: WORK/image_YYYYMMDD_HHMMSS/. PPTX goes to WORK/.",
 )
 @click.option(
     "--api-key",
@@ -560,13 +412,14 @@ def _run_generation(
     help="Skip printing OpenRouter credits after a successful run.",
 )
 @click.option(
-    "--pdf-only",
+    "--pptx-only",
+    "pptx_only",
     is_flag=True,
     default=False,
     help=(
-        "Rebuild presentation_slides_*.pdf and presentation_speech_*.pdf in --work from "
-        "existing slide_p##_v##.png files in --output (no API calls). "
-        "Speech PDF uses --outline when available and always the first variant per slide."
+        "Rebuild slides_YYYYMMDD.pptx in --work from existing "
+        "slide_p##_v##.png files in --output (no API calls). "
+        "Speaker notes come from --script [Speech:] tags when available."
     ),
 )
 @click.option(
@@ -574,42 +427,40 @@ def _run_generation(
     type=str,
     default=None,
     help=(
-        "With --pdf-only: include only these variant numbers in presentation_slides PDF "
-        "(e.g. '1' or '1,2'). Default: all variants present in --output. "
-        "Does not affect presentation_speech PDF (always first variant per slide)."
+        "With --pptx-only: include only these variant numbers in the PPTX "
+        "(e.g. '1' or '1,2'). Default: all variants present in --output."
     ),
 )
 def main(
     work_dir: Path,
-    outline_path: Path,
-    style: tuple[str, ...],
+    script_path: Path,
+    style_dir: Path,
     copy: int,
     output: Path | None,
-    article: tuple[str, ...],
     api_key: str | None,
     page: str | None,
     proxy: str | None,
     provider: str | None,
     balance_only: bool,
     no_balance: bool,
-    pdf_only: bool,
+    pptx_only: bool,
     variant: str | None,
 ) -> None:
-    """Compose slide images from a markdown outline and optional style references."""
+    """Compose slide images from a script and optional style plates."""
     if balance_only and no_balance:
         raise click.UsageError("--balance-only cannot be used together with --no-balance.")
-    if pdf_only and balance_only:
-        raise click.UsageError("--pdf-only cannot be used with --balance-only.")
-    if pdf_only and output is None:
-        raise click.UsageError("--pdf-only requires --output (existing image directory).")
+    if pptx_only and balance_only:
+        raise click.UsageError("--pptx-only cannot be used with --balance-only.")
+    if pptx_only and output is None:
+        raise click.UsageError("--pptx-only requires --output (existing image directory).")
 
-    if pdf_only:
+    if pptx_only:
         assert output is not None
-        outline_for_pdf = outline_path if outline_path.is_file() else None
-        _run_pdf_only(
+        outline_for_pptx = script_path if script_path.is_file() else None
+        _run_pptx_only(
             output,
             work_dir=work_dir,
-            outline=outline_for_pdf,
+            outline=outline_for_pptx,
             page=page,
             variant=variant,
         )
@@ -619,16 +470,19 @@ def main(
         _run_balance_only(api_key=api_key, proxy=proxy, provider=provider)
         return
 
-    if not outline_path.is_file():
-        raise click.UsageError(f"Outline file not found: {outline_path}")
+    if not script_path.is_file():
+        raise click.UsageError(f"Script file not found: {script_path}")
 
+    style_source = click.get_current_context().get_parameter_source("style_dir")
+    style_explicit = style_source is not ParameterSource.DEFAULT
+    resolved_style = style_dir if style_explicit else project_style_dir(work_dir)
     _run_generation(
-        outline=outline_path,
+        script=script_path,
         work_dir=work_dir,
-        style=style,
+        style_dir=resolved_style,
+        style_explicit=style_explicit,
         copy=copy,
         output=output,
-        article=article,
         api_key=api_key,
         page=page,
         proxy=proxy,

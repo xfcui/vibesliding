@@ -21,20 +21,26 @@ alwaysApply: true
 4. Quick Start (2-3 commands max)
 5. Pipeline (numbered steps with bash block)
 6. Usage Examples (progressive complexity)
-7. CLI Reference (one table per module: `src.research.cli`, `src.outline.cli`, `src.render.style.cli`, `src.render.cli`, `src.present.cli`)
+7. CLI Reference (one table per module: `src.plan.cli`, `src.write.cli`, `src.design.cli`, `src.render.cli`, `src.present.cli`)
 8. Input/Output (work directory tree, outline format, render output)
-9. Configuration (`.env` section table + provider routing)
+9. Configuration (`.env` table matching `.env.example`: preamble `provider`, `max_concurrent`, `proxy`; sections `[openrouter]`, `[volcengine]`, `[minimax]`; plus provider routing)
 10. License + friendly sign-off
 
 ## Canonical Paths
 
 Source of truth for file naming lives in `src/core/paths.py`. Always cross-check when documenting:
 
+- Inputs: `work/idea.md`, optional `work/source.md`
+- Facts: `work/facts.md`
+- Design brief: `work/design_brief.md`
+- Default plan: `work/plan_16.md` (`plan_{n}.md`)
+- Default script: `work/script_16.md` (`script_{n}.md`)
+- Write prompt snapshots: `work/write_prompts/slide_p##_prompt.txt`
+- Style plates: `work/style/` when that folder exists, otherwise `style/`; design writes to `work/style/` by default, with a `<plate>_prompt.txt` sidecar per plate
 - Image output dir: `work/image_YYYYMMDD_HHMMSS/` (prefix `IMAGE_DIR_PREFIX`)
-- Slide PNGs: `slide_p##_v##.png`
-- PDFs go to `--work` dir: `presentation_slides_YYYYMMDD_HHMMSS.pdf`, `presentation_speech_YYYYMMDD_HHMMSS.pdf`
-- Default outline: `work/outline_16.md`
-- Research state: `work/research_state.json`
+- Slide PNGs: `slide_p##_v##.png`, with `slide_p##_prompt.txt` sidecars in the same dir
+- PPTX goes to `--work` dir: `slides_YYYYMMDD.pptx` (slide images + speaker notes)
+- Presentation video: `work/presentation_video_YYYYMMDD_HHMMSS.mp4`
 
 ## Update When
 

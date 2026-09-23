@@ -10,7 +10,7 @@ from src.core.export import (
     collect_slide_image_paths,
     slides_by_index_from_outline,
 )
-from src.outline.parser import extract_speech_text
+from src.core.parser import extract_speech_text, speech_for_tts
 
 
 @dataclass(frozen=True)
@@ -53,11 +53,8 @@ def collect_slide_segments(
         if slide_number is None:
             continue
         slide = slides_by_index.get(slide_number)
-        speech = (
-            extract_speech_text(slide.content)
-            if slide is not None
-            else None
-        )
+        raw_speech = extract_speech_text(slide.content) if slide is not None else None
+        speech = speech_for_tts(raw_speech) if raw_speech else raw_speech
         segments.append(
             SlideSegment(
                 slide_number=slide_number,

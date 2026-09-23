@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -121,6 +122,59 @@ def test_narrate_missing_image_dir(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "Image directory not found" in result.output
+
+
+def test_narrate_explicit_missing_script_does_not_use_snapshot(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    runner = CliRunner()
+    missing = tmp_path / "script_99.md"
+    with patch("src.present.cli.build_presentation_video") as mock_build:
+        result = runner.invoke(
+            main,
+            [
+                "--output",
+                str(image_dir),
+                "--work",
+                str(tmp_path),
+                "--script",
+                str(missing),
+                "--mux-only",
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "Script not found" in result.output
+    assert "Using " not in result.output
+    mock_build.assert_not_called()
+
+
+def test_narrate_omitted_script_uses_newest_snapshot(
+    image_dir: Path, tmp_path: Path
+) -> None:
+    older = image_dir / "script_25.md"
+    newer = image_dir / "script_16.md"
+    older.write_text(OUTLINE, encoding="utf-8")
+    newer.write_text(OUTLINE, encoding="utf-8")
+    os.utime(older, (1_000, 1_000))
+    os.utime(newer, (2_000, 2_000))
+
+    runner = CliRunner()
+    with patch("src.present.cli.build_presentation_video", return_value=1):
+        result = runner.invoke(
+            main,
+            [
+                "--output",
+                str(image_dir),
+                "--work",
+                str(tmp_path),
+                "--mux-only",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert f"Using {newer.resolve()}" in result.output
+    assert str(older.resolve()) not in result.output.split("Using ", 1)[-1]
 
 
 def test_narrate_rejects_both_reference_audio_and_voice_id(

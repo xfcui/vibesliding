@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from pathlib import Path
 from typing import Any, Final
 
 import httpx
-from tqdm import tqdm
 
+from src.core.api_client import (
+    DEFAULT_MIN_REQUEST_INTERVAL,
+    AsyncRateLimiter,
+    _image_api_retry,
+    _run_parallel_api_calls,
+)
 from src.core.config import MiniMaxTtsConfig
+from src.core.validate import CJK_CHAR_PATTERN
 
 _UPLOAD_TIMEOUT: Final[httpx.Timeout] = httpx.Timeout(30.0, read=120.0)
 _TTS_TIMEOUT: Final[httpx.Timeout] = httpx.Timeout(30.0, read=120.0)
@@ -25,12 +32,18 @@ def _check_response(data: dict[str, Any], context: str) -> None:
         raise RuntimeError(f"MiniMax {context} failed (code {code}): {msg}")
 
 
+def language_boost_for(text: str) -> str:
+    """``Chinese`` for CJK text; otherwise let MiniMax detect the language."""
+    return "Chinese" if CJK_CHAR_PATTERN.search(text) else "auto"
+
+
 def _voice_id_from_path(ref_path: Path) -> str:
     """Deterministic voice_id derived from the reference audio content hash."""
     content_hash = hashlib.md5(ref_path.read_bytes()).hexdigest()[:12]
     return f"vibesliding_{content_hash}"
 
 
+@_image_api_retry()
 async def _upload_file(
     client: httpx.AsyncClient,
     file_path: Path,
@@ -60,6 +73,7 @@ async def _upload_file(
     return int(file_id)
 
 
+@_image_api_retry()
 async def _clone_voice(
     client: httpx.AsyncClient,
     *,
@@ -121,69 +135,23 @@ async def setup_cloned_voice(
     return voice_id
 
 
-async def synthesize_speech(
-    config: MiniMaxTtsConfig,
-    text: str,
-    *,
-    voice_id: str | None = None,
-) -> bytes:
-    """Synthesize a single text clip and return MP3 bytes."""
-    resolved_voice = voice_id or config.tts_voice
-    url = f"{config.BASE_URL}/t2a_v2"
-    payload: dict[str, Any] = {
-        "model": config.tts_model,
-        "text": text,
-        "voice_setting": {
-            "voice_id": resolved_voice,
-            "speed": 1.0,
-            "vol": 1.0,
-            "pitch": 0,
-        },
-        "audio_setting": {
-            "sample_rate": 32000,
-            "bitrate": 128000,
-            "format": "mp3",
-            "channel": 1,
-        },
-        "language_boost": "Chinese",
-        "output_format": "hex",
-    }
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=_TTS_TIMEOUT,
-        )
-    response.raise_for_status()
-    result = response.json()
-    _check_response(result, "TTS synthesis")
-    hex_audio = result.get("data", {}).get("audio")
-    if not hex_audio:
-        raise RuntimeError("MiniMax TTS returned no audio data")
-    return bytes.fromhex(hex_audio)
-
-
 async def synthesize_speech_parallel(
     config: MiniMaxTtsConfig,
     texts: list[str],
     *,
     voice_id: str | None = None,
-    desc: str = "MiniMax TTS",
+    desc: str = "Speech synthesis",
     max_concurrent: int = 4,
 ) -> list[bytes | Exception]:
-    """Synthesize multiple texts in parallel with progress bar."""
-    import asyncio
-
+    """Synthesize multiple texts in parallel with shared retries, rate limit, and tqdm."""
     semaphore = asyncio.Semaphore(max_concurrent)
+    rate_limiter = AsyncRateLimiter(DEFAULT_MIN_REQUEST_INTERVAL)
     resolved_voice = voice_id or config.tts_voice
     url = f"{config.BASE_URL}/t2a_v2"
-    pbar = tqdm(total=len(texts), desc=desc, unit="call")
 
-    async def _one(client: httpx.AsyncClient, text: str) -> bytes:
+    @_image_api_retry()
+    async def _synthesize(client: httpx.AsyncClient, text: str) -> bytes:
+        await rate_limiter.acquire()
         async with semaphore:
             payload: dict[str, Any] = {
                 "model": config.tts_model,
@@ -200,7 +168,7 @@ async def synthesize_speech_parallel(
                     "format": "mp3",
                     "channel": 1,
                 },
-                "language_boost": "Chinese",
+                "language_boost": language_boost_for(text),
                 "output_format": "hex",
             }
             response = await client.post(
@@ -218,12 +186,20 @@ async def synthesize_speech_parallel(
             hex_audio = result.get("data", {}).get("audio")
             if not hex_audio:
                 raise RuntimeError("MiniMax TTS returned no audio data")
-            pbar.update(1)
             return bytes.fromhex(hex_audio)
 
-    async with httpx.AsyncClient() as client:
-        coros = [_one(client, t) for t in texts]
-        raw = await asyncio.gather(*coros, return_exceptions=True)
+    async def _run_one(client: httpx.AsyncClient, index: int) -> tuple[int, bytes | Exception]:
+        try:
+            return index, await _synthesize(client, texts[index])
+        except Exception as exc:
+            return index, exc
 
-    pbar.close()
-    return list(raw)
+    return await _run_parallel_api_calls(
+        total=len(texts),
+        max_concurrent=max_concurrent,
+        proxy=None,
+        desc=desc,
+        unit="call",
+        run_one=_run_one,
+        missing_error="Missing speech result",
+    )

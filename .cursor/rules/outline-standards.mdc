@@ -1,21 +1,24 @@
 ---
-description: PPT outline format standards for slide generation
+description: Deck standards for plan, script, and render — structure, writing, visual/text balance, self-consistency, visual and speech tags, speech length
 alwaysApply: true
 ---
 
 # Outline Standards
 
-Use these standards whenever creating, reviewing, or optimizing PPT outlines.
+Use these standards whenever creating, reviewing, or optimizing PPT plans and scripts.
+
+The write stage sends everything from the Writing Standards heading up to the Appendix Requirements heading to the model as its spec, matching the first occurrence of each heading line. Keep those two headings verbatim, in order, and never quote them earlier in this file; keep the balance table's first-column labels (Content, Transition, Cover / Ending); and state model-facing rules in prose — fenced examples are stripped before the model sees them.
 
 ## Core Principles
 
-- **Title is the message:** The slide title states the takeaway to deliver — a claim, tension, or decision — not a topic label. If the audience only reads the title, they should still know what the slide argues.
-- **Content is precise and easy:** Bullets are exact, scannable, and easy to understand; order them in a logical flow; use callbacks to earlier slides so the deck feels like one argument, not disconnected facts.
-- **Visual and speech stay consistent:** `[Visual:]` and `[Speech:]` tell the same story as the title and bullets — same focal idea, same contrast or sequence, same takeaway. The visual shows it; the speech narrates it; neither invents a different message.
-- **Visual carries the content:** The composition communicates each slide's narrative, sequence, contrast, or transformation before any text is read.
-- **Text earns its place:** Bullets act as labels, anchors, and reasoning the visual cannot show; cut anything the visual already conveys.
-- **One slide, one idea:** Resolve every slide to a single explicit takeaway, not a collection of loosely related facts.
-- **Built for live presentation:** Design for an audience scanning in seconds while the speaker talks, not for a reader studying a document.
+- **Title is the message:** State a claim, tension, or decision, not a topic label.
+- **Content is precise and easy:** Exact, scannable bullets in logical order, with callbacks that make the deck one argument.
+- **Self-consistent:** Each slide carries one message across title, bullets, visual, and speech, and no slide contradicts another. See Self-Consistency.
+- **Visual carries the content:** The composition shows the narrative, sequence, contrast, or transformation before any text is read.
+- **Text earns its place:** Bullets carry labels, anchors, and reasoning the visual cannot show.
+- **Balanced content, visual-led structure:** Content slides carry comparable weight in bullets and `[Visual:]` — never mainly text, never mainly visual. Cover, transition, and ending slides lean visual. See Visual/Text Balance.
+- **One slide, one idea:** Every slide resolves to a single explicit takeaway.
+- **Built for live presentation:** Design for an audience scanning in seconds while the speaker talks.
 
 ## Required Structure
 
@@ -27,8 +30,9 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 ## Slide 1: [Slide Title]
 - **Label:** Self-contained explanation that states why the point matters
 - Core insight: Main takeaway that ties the slide together
+[Style: style_content.png]
 [Reference: path/to/image.jpg]
-[Visual: Main composition and focal object; layout direction; recurring motifs; style constraints; no watermark or fake logos]
+[Visual: Main composition and focal object; layout direction; recurring motifs; style constraints; Slide number: 1]
 [Speech: Conversational presenter narration for this slide]
 
 ---
@@ -42,45 +46,58 @@ Use these standards whenever creating, reviewing, or optimizing PPT outlines.
 - Separate the title, every slide, and the appendix with `---`.
 - Use sequential slide headers: `## Slide N: [Title]`.
 - End every slide with one `[Visual: ...]` tag and one `[Speech: ...]` tag.
-- Include one transition slide before each section — no transition before hook or call to action (see Slide Counting & Quotas).
+- Include one transition slide before each section (see Slide Counting & Quotas).
 - Include `## Appendix: Global Visual Requirements` after the final slide.
 
 ## Reference Image Tags
 
-If a slide uses any specific reference images (e.g., a presenter's headshot, a specific diagram/chart reference, or a photo reference), you MUST explicitly declare them using a slide-scoped reference tag.
+Declare every slide-specific asset (headshot, chart, diagram, photo) in a slide-scoped reference tag.
 
-- **Format:** Use `[Reference: path/to/image.png]` or `[Refs: path/to/image.png]`. Multiple references can be separated by commas, e.g., `[Reference: path/1.png, path/2.jpg]`.
-- **Placement:** Put the `[Reference: ...]` tag immediately before the `[Visual: ...]` tag of the slide.
-- **Why it matters:** The image generation orchestrator only reads, loads, and sends reference images to the API if they are explicitly declared in a `[Reference: ...]` tag. Simply mentioning the image path inside the `[Visual: ...]` tag is NOT enough, as the orchestrator will not load it.
+- **Format:** `[Reference: path/to/image.png]` or `[Refs: path/to/image.png]`; separate several with commas.
+- **Placement:** Immediately before the slide's `[Visual: ...]` tag.
+- **Why it matters:** The render stage only loads images declared in `[Reference: ...]`. A path mentioned inside `[Visual: ...]` is never sent.
 - **Supported formats:** `.png`, `.jpg`, `.jpeg`.
-- **Path Resolution:** Relative paths are resolved relative to the outline file's parent directory or the workspace root. Always verify the file exists before referencing it.
+- **Path resolution:** Relative to the outline file's parent directory or the workspace root. Verify the file exists.
+- **Never declare style plates here:** use `[Style: ...]`. `[Reference: ...]` is only for real assets.
+
+## Style Plate Tags
+
+Deck style plates live in the `--style` directory (default `work/style/` when it exists, otherwise `style/`) and are attached per slide with a `[Style: ...]` tag.
+
+- **Format:** `[Style: style_content.png]`, or several comma-separated: `[Style: style_content.png, style_base_content.png]`.
+- **Filenames only:** Name a file *inside* the style directory. Relative and absolute paths are rejected.
+- **Placement:** Immediately before the slide's `[Reference: ...]` tag if it has one, otherwise immediately before `[Visual: ...]`.
+- **Optional:** Without a tag, slides are routed by role — content gets `style_content.png` + `style_base_content.png`; cover and ending get `style_cover.png` + `style_base_noncontent.png`; transitions get `style_transition.png` + `style_base_noncontent.png`. Add the tag only to override that default.
+- **Available plates:** `style_base_noncontent.png` (dark curtain), `style_base_content.png` (light teaching), `style_cover.png`, `style_transition.png`, `style_content.png`.
+- **Keep the two-tone system intact:** Never attach a dark non-content plate to a content slide or vice versa — the model blends conflicting backgrounds.
 
 ## Slide Categories
 
-Every slide is either a **content slide** (counted toward the requested slide count) or a **non-content slide** (NOT counted). The requested slide count always refers to content slides only.
+Every slide is either a **content slide** (counted toward the requested slide count) or a **non-content slide** (not counted).
 
 ### Content Slides (counted)
 
-Teach one clear idea per slide with 5-6 substantial bullets and an explicit takeaway such as `Core insight:`, `Core logic:`, or `Anti-pattern:`. Content slides fall into three roles:
+Teach one clear idea per slide with 5 substantial bullets plus an explicit takeaway (`Core insight:`, `Core logic:`, or `Anti-pattern:`) — **6 bullet lines total**, 7 only when the extra line genuinely earns it.
 
-- **Hook (1-3 slides, at the beginning):** Grab attention and frame the stakes — the problem, tension, surprising fact, or question the deck will resolve. Required.
-- **Sections (3-6 sections):** The body of the deck, where each section is a run of content slides teaching, demonstrating, or comparing one idea (concepts, workflows, case studies, conclusions). For a long section, optionally open it with a high-level explanation/overview slide that previews what the section covers.
-- **Call to Action (1 slide, at the end):** The decisive next step, ask, or takeaway the audience should leave with. Optional.
+- **Hook (1-3 slides, at the beginning):** Frame the stakes — the problem, tension, surprising fact, or question the deck will resolve. Required; starts immediately after the cover.
+- **Sections (3-6 sections):** The body of the deck; each section is a run of content slides teaching, demonstrating, or comparing one idea. A long section may open with an overview slide.
+- **Call to Action (1 slide, at the end):** The decisive next step or ask. Optional.
 
-### Non-content Slides (NOT counted)
+### Non-content Slides (not counted)
 
-Structural and navigational slides that frame the deck. Keep bullets minimal (2-4 lines):
+Structural slides that frame the deck. Visual-led and compact but never thin — the `[Visual:]` outweighs the bullets, and every line still says something.
 
-- **Cover slide:** Opening title slide; make the premise immediately legible. Exactly one, at the start.
-- **Transition slides:** One before each section (so 3-6 total, matching the section count); NO transition before the hook or call to action. Hook slides start immediately after the cover slide. Repeat the full roadmap or section map, bold only the current section, and include a visual progress marker such as `progress bar N/total`.
-- **Ending slides:** Closing Q&A / thank-you slide(s) that visually reconnect to the cover. MUST include a clear take-home message — the single idea the audience should remember.
+- **Cover (exactly one, first):** 3-4 lines that make the premise immediately legible.
+- **Transition (one per section):** 4 lines that repeat the roadmap as text. See Slide Counting & Quotas.
+- **Ending (last):** 3-4 lines that visually reconnect to the cover and state one clear take-home message.
 
 ### Slide Counting & Quotas
 
 - The requested slide count counts **content slides only** (hook + sections + optional call to action). Cover, transition, and ending slides are always extra.
-- Every deck MUST divide its content into **3-6 sections**, with exactly **one transition slide before each section** (but none before hook or call to action) so the deck reads as 3-6 acts, never one undifferentiated run of content slides. The hook starts immediately after the cover slide.
-- Make each transition slide detectable: prefix its title with `Roadmap:` plus the section's message (e.g. `## Slide 6: Roadmap: Leave the Editor Behind`) **and** include a progress marker such as `progress bar N/total` in its `[Visual:]` tag.
-- Reuse one consistent roadmap/section-map composition across all transition slides, bolding or highlighting only the current section each time.
+- Divide the content into **3-6 sections** with exactly **one transition slide before each section** and none before the hook or call to action.
+- Make each transition detectable: title prefixed `Roadmap:` plus the section's message (e.g. `## Slide 6: Roadmap: Leave the Editor Behind`) **and** a `progress bar k/total` marker in its `[Visual:]`, where k/total counts sections, not pages.
+- Spell out the full roadmap **as bullet text**, not only inside `[Visual:]`: bold the current section and mark completed ones.
+- Reuse one roadmap composition across all transitions, highlighting only the current section.
 
 ## Writing Standards
 
@@ -99,7 +116,6 @@ Structural and navigational slides that frame the deck. Keep bullets minimal (2-
 - Keep language easy to understand — short sentences, plain words, no jargon unless the audience already knows it.
 - Order bullets in a logical flow (setup → mechanism → evidence → implication), not a random list.
 - Use callbacks: reconnect to earlier hooks, sections, or motifs so the audience hears one continuous argument ("Remember that failure mode from earlier — here is the fix.").
-- Keep text supportive and compact so the slide is not forced to tell the whole content through bullets.
 - Use summary bullets to make the takeaway explicit: `Core insight:`, `Core logic:`, or `Anti-pattern:`.
 - Use tables for taxonomies or comparisons, and sub-bullets only for workflows such as `Plan -> Implement -> Test`.
 
@@ -115,37 +131,135 @@ Structural and navigational slides that frame the deck. Keep bullets minimal (2-
 - Performance: Fast
 ```
 
+### Self-Consistency
+
+- **Within a slide:** The title, bullets, `[Visual:]`, and `[Speech:]` carry one message — same focal idea, same contrast or sequence, same takeaway. The visual shows it and the speech narrates it; neither invents a different claim or metaphor.
+- **Across the deck:** Terms, names, numbers, units, and cited facts stay identical everywhere they appear. Never state a figure one way on one slide and another way later.
+- **Structure:** Section names match between roadmap bullets, transition titles, and the sections themselves.
+- **Callbacks:** Point only to slides that really came earlier, and restate what they said accurately.
+- **Style:** Colors, fonts, and recurring motifs match the appendix and stay the same from slide to slide.
+- **No contradictions:** If two slides disagree, fix one; do not leave the audience to reconcile them.
+
+## Visual/Text Balance
+
+- **Content slides, both halves:** Each content slide (hook, content, call to action) carries comparable weight in its bullets and its `[Visual:]` tag. Never write a mainly-text slide (a bullet dump the image merely decorates) or a mainly-visual slide (rich art direction beside thin bullets).
+- **Non-content slides, visual first:** Cover, transition, and ending slides are curtains between acts, so their `[Visual:]` carries more words than their bullets. Keep the bullets compact and put the extra weight into the composition.
+- **Consistent across the deck:** A run of content slides that alternates between wall-of-text and pure-imagery slides feels inconsistent even when each slide is defensible.
+
+### Targets
+
+Count words in the bullet lines (`text`) and in the `[Visual:]` tag (`visual`), then check `ratio = text / visual`. For Chinese, each character counts as about half a word. Measure with `measure_slide_balance` from `src/core/validate.py` rather than by eye.
+
+| Slide role | Bullet lines | Bullet words | Visual words | Ratio |
+|---|---|---|---|---|
+| Content | 6 (5 + takeaway) | 115-195 | 100-170 | 0.85-1.35 |
+| Transition | 4 (roadmap as text) | 80-100 | 100-140 | under 1.0 |
+| Cover / Ending | 3-4 | 70-100 | 100-140 | under 1.0 |
+
+- The ratio band applies to content slides only. Keep their spread tight; a median near `1.05` with every content slide inside the band reads as balanced.
+- Non-content slides have a ceiling, not a band: any ratio under `1.0` passes, as long as the bullets still meet their line count.
+- Treat these as guardrails, not quotas — miss the target by a few words rather than padding filler to hit a number.
+
+### Fixing a Text-Heavy Content Slide (ratio > 1.35)
+
+- Fold secondary points into the takeaway bullet instead of giving them their own line.
+- Cut anything the `[Speech:]` already narrates — the speech, not the slide, carries elaboration.
+- Shorten `**Label:** explanation` bullets to one clause each; keep the specific number, drop the setup.
+- Only then add visual detail, and add *structure* (focal object, panel layout, annotated values), never adjectives.
+
+### Fixing a Visual-Heavy Content Slide (ratio < 0.85)
+
+- Add the reasoning the image cannot show: why the number matters, what the comparison implies, what the audience should do.
+- Give the visual's focal elements text anchors — if the composition has three labeled panels, the bullets should name and interpret them.
+- Never pad with restatements of the title or with bullets that only describe the picture.
+
+### Fixing a Text-Heavy Non-content Slide (ratio 1.0 or more)
+
+- Trim bullets to one clause each; keep the roadmap labels or the premise, drop the setup the speech already gives.
+- Move the weight into the composition: the focal object, the roadmap path and its highlighted stop, the callback from the ending to the cover.
+
+### Anti-patterns
+
+```markdown
+# Bad — mainly text (8 thin bullets, decorative visual)
+## Slide 9: Data Problems
+- Batch effects
+- Missing labels
+- Class imbalance
+- ... 5 more one-word lines
+[Visual: Light background, some data icons, Slide number: 9]
+
+# Bad — mainly visual (rich composition, two vague bullets)
+## Slide 9: Biological Data Breaks Standard ML Assumptions
+- Data is messy
+- Core insight: This is hard
+[Visual: 120 words of detailed panel-by-panel art direction...]
+```
+
 ## Visual Tags
 
 Write `[Visual:]` prompts as production-ready art direction that tells the slide's content faster than decoration or text alone.
 
-- **Consistency with title, bullets, and speech:** The visual must depict the same message as the slide title and the same narrative the speech will voice — same focal idea, same contrast/sequence, same takeaway. Do not invent a different metaphor that fights the spoken story.
-- **Visual style ownership:** `[Visual:]` owns layout, composition, diagram language, icon treatment, recurring motifs, and animation intent. Do NOT restate these in the appendix — define them here per slide (or inherit from style reference images).
+- **Consistent with the slide:** Depict the title's message and the narrative the speech will voice (see Self-Consistency).
+- **Visual style ownership:** `[Visual:]` owns layout, composition, diagram language, icon treatment, recurring motifs, and animation intent. Do not restate these in the appendix.
 - Specify the focal object, foreground/background structure, and layout pattern: split-screen, grid, pipeline, roadmap, or system diagram.
+- Give every slide enough compositional specificity to hold its own against the bullets — and to outweigh them on cover, transition, and ending slides: name the focal object, describe each panel or stage, and say what the eye follows. A one-line visual next to six bullets is under-specified.
 - Show the narrative visually through contrast, sequence, hierarchy, cause/effect, before/after, or movement through a workflow.
-- Preserve deck continuity with recurring motifs such as beams, nodes, panels, icons, section colors, or progress markers.
-- **Two-tone backgrounds:** Content slides use a white/light background for maximum readability; non-content slides (cover, transitions, ending) use a dark background to create a bold visual "curtain" that distinguishes structural pauses from teaching slides.
-- Reference style plates where appropriate: `style_base_noncontent.png` (dark curtain), `style_base_content.png` (light teaching), `style_cover.png`, `style_transition.png`, `style_content.png`.
-- On content and transition slides, include a slide marker such as `Slide number: N/total` (omit on cover and ending).
-- Keep generated-image text minimal; avoid dense labels, watermarks, fake logos, AI-generation stamps, page numbers, and decorative text unless required.
-- When reference slide images exist, extract concrete style rules from them and reuse those rules in later visual prompts.
+- Preserve deck continuity with recurring motifs such as a DNA double helix, beams, nodes, panels, icons, section colors, or progress markers.
+- **Two-tone backgrounds:** Content slides use a white/light background for readability; cover, transition, and ending slides use a dark background as a bold "curtain" that marks structural pauses.
+- Do not name style plate files in this prose — plate selection belongs in the slide's `[Style: ...]` tag, and slides without one inherit the correct plate from their role.
+- **Page number:** On content slides (hook, content, call to action), include `Slide number: N` — the slide's own page number only. Never show the total page count (no `N/total`, no "N of M"). Cover, transition, and ending slides show no page number.
+- **Transition progress:** Transition slides show `progress bar k/total`, where k/total counts sections, not pages.
+- Keep generated-image text minimal; avoid dense labels, watermarks, fake logos, AI-generation stamps, other page numbers, and decorative text unless required.
+- When `[Reference:]` images or style plates are attached, extract concrete style rules from them and reuse those rules in later visual prompts.
 
 ## Speech Tags
 
-Write `[Speech:]` as natural presenter narration that stays consistent with the title, bullets, and `[Visual:]`.
+Write `[Speech:]` as natural presenter narration.
 
-- **Consistency with visual and content:** Narrate what the slide shows and argues — open on the title's message, walk the visual's focal contrast or sequence, land on the same takeaway as the bullets. Do not introduce a competing metaphor or a different claim.
+- **Consistent with the slide:** Open on the title's message, walk the visual's focal contrast or sequence, and land on the bullets' takeaway (see Self-Consistency).
 - Expand on the bullets with context, emphasis, transitions, callbacks to earlier slides, or examples not already visible on the slide.
-- Aim for 60-90 seconds on content slides; 15-30 seconds on transition slides; shorter scripts for cover and ending when appropriate.
+- Aim for 1-2 minutes (60-120 seconds) on content slides (hook, content, call to action) and about 30 seconds (20-40 seconds) on non-content slides (cover, transition, ending).
+- Time speech at about 150 English words or 300 Chinese characters per minute: roughly 150-300 words (300-600 characters) on a content slide and 50-100 words (100-200 characters) on a non-content slide.
 - On content slides, end with a short **bridge sentence** into the next slide — after the takeaway lands, not instead of it. The bridge previews the next idea; it must not replace this slide's message or fight the visual.
 - Keep the tone conversational, as if presenting live rather than reading a document.
 
 ## Appendix Requirements
 
-The appendix defines **text-describable** deck-wide constraints only. Do NOT define layout, composition, diagram, icon, motif, or animation styles here — those are visual styles owned by each slide's `[Visual:]` tag and the style reference images.
+The appendix defines **text-describable** deck-wide constraints only. Layout, composition, diagram, icon, motif, and animation styles belong in `[Visual:]` tags and the style plates.
 
-- **Theme:** Color palette with hex codes (primary accent, secondary accent, warning/de-emphasis colors). Use white/light backgrounds for content slides (readability and clean look) and dark backgrounds for non-content slides — cover, transitions, and ending — creating a strong "curtain" effect that signals structural pauses between sections.
-- **Fonts:** Title, body, and code fonts with weights and point sizes
-- **Format:** Optional numeric constants only (16:9 aspect ratio, safe-margin %, minimum contrast ratio)
+- **Theme:** Color palette with hex codes (primary accent, secondary accent, warning/de-emphasis colors), with light backgrounds for content slides and dark backgrounds for cover, transition, and ending slides.
+- **Fonts:** Title, body, and code fonts with weights and point sizes.
+- **Format:** Optional numeric constants only (16:9 aspect ratio, safe-margin %, minimum contrast ratio).
 
-Do not duplicate visual direction between the appendix and `[Visual:]` tags. If a style is easier to show than to write (layout, diagrams, icons, motifs), put it in `[Visual:]` only.
+## Plan format
+
+The plan stage writes this shape. The write stage turns it into the full slide format above. Both start with `# PPT Outline: [Title]` and end with the same appendix.
+
+```markdown
+# PPT Outline: [Presentation Title]
+
+---
+
+## Slide 1: [Message title]
+- Role: cover|hook|content|transition|cta|ending
+- Section: k/total
+- Point: one claim or step
+- Point: the next claim or step
+- Evidence: F3, F7
+- Visual hook: the focal object and layout in one line
+[Style: style_content.png]
+[Reference: path/to/image.png]
+
+---
+
+## Appendix: Global Visual Requirements
+- **Theme:** Colors, accents
+- **Fonts:** Title/body fonts and sizes
+```
+
+- Each slide has a `Role:`, 2-4 `Point:` lines, and exactly one `Visual hook:`.
+- `facts.md` sits beside the plan and is required by the write stage. Each fact is one bullet, `- **F3 Short name.** The fact — citation`, with a unique ID. `Evidence:` lists the IDs a slide relies on; hook, content, and call-to-action slides cite at least one.
+- Transition titles keep the `Roadmap:` prefix and include `Section: k/total`, counting 1 to total in order, where total is the number of transitions. Any other slide that names a section uses the number of the transition it follows.
+- `[Style:]` and `[Reference:]` are optional and are copied unchanged into the script.
+- `design_brief.md` sits beside the plan. Use `- **Field:** value` lines for topic family, mood, signature motif, avoid, language (`zh` or `en`), footer, cover eyebrow, cover title, cover support, content eyebrow, content title, and content stages (comma-separated).

@@ -1,0 +1,102 @@
+"""Outline markdown parser - extracts slides from H2 headings."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Final
+
+# Constants
+H2_PATTERN: Final[re.Pattern] = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+SLIDE_PREFIX_PATTERN: Final[re.Pattern] = re.compile(r"^Slide\s+\d+:\s*", re.IGNORECASE)
+STYLE_KEYWORDS: Final[tuple[str, ...]] = (
+    "global visual requirements",
+    "visual style",
+    "design standards",
+)
+SPEECH_TAG_PATTERN: Final[re.Pattern] = re.compile(
+    r"\[Speech\s*:\s*(.*?)\]",
+    re.IGNORECASE | re.DOTALL,
+)
+MD_LINK_PATTERN: Final[re.Pattern] = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+MD_EMPHASIS_PATTERN: Final[re.Pattern] = re.compile(r"(\*{1,3}|_{2,3})(\S(?:.*?\S)?)\1")
+MD_CODE_PATTERN: Final[re.Pattern] = re.compile(r"`+([^`]*)`+")
+MD_LINE_MARKER_PATTERN: Final[re.Pattern] = re.compile(r"^\s*(?:#{1,6}|[-*+]|>)\s+", re.MULTILINE)
+
+
+@dataclass
+class Slide:
+    """A single slide extracted from markdown outline.
+    
+    Attributes:
+        index: 1-based slide number
+        title: Slide title text (from H2 heading)
+        content: Full markdown content under this heading
+    """
+
+    index: int
+    title: str
+    content: str
+
+
+def parse_markdown(markdown_text: str) -> list[Slide]:
+    """Split markdown by ## headings into Slide objects.
+    
+    Each H2 (## Title) starts a new slide. Content between H2s belongs to that slide.
+    
+    Args:
+        markdown_text: Raw markdown text with H2 headings
+        
+    Returns:
+        List of Slide objects in order of appearance
+    """
+    matches = list(H2_PATTERN.finditer(markdown_text))
+    
+    if not matches:
+        return []
+
+    slides: list[Slide] = []
+    for i, match in enumerate(matches):
+        title = match.group(1).strip()
+        # Remove "Slide n:" prefix if present
+        title = SLIDE_PREFIX_PATTERN.sub("", title).strip()
+        start = match.end()
+        
+        # Content runs until the next H2 or end of text
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(markdown_text)
+        content = markdown_text[start:end].strip()
+        
+        slides.append(Slide(index=i + 1, title=title, content=content))
+
+    return slides
+
+
+def extract_global_style(slides: list[Slide]) -> str | None:
+    """Extract global visual style from slides if present."""
+    for slide in slides:
+        title_lower = slide.title.lower()
+        if any(keyword in title_lower for keyword in STYLE_KEYWORDS):
+            return slide.content
+    return None
+
+
+def extract_speech_text(content: str) -> str | None:
+    """Return presenter speech from a slide's ``[Speech:]`` tag, if present."""
+    matches = list(SPEECH_TAG_PATTERN.finditer(content))
+    if not matches:
+        return None
+    for match in reversed(matches):
+        val = match.group(1).strip()
+        if val:
+            return val
+    return matches[-1].group(1).strip()
+
+
+def speech_for_tts(text: str) -> str:
+    """Strip markdown so a TTS voice reads words, not symbols."""
+    cleaned = MD_LINK_PATTERN.sub(r"\1", text)
+    cleaned = MD_CODE_PATTERN.sub(r"\1", cleaned)
+    cleaned = MD_EMPHASIS_PATTERN.sub(r"\2", cleaned)
+    cleaned = MD_LINE_MARKER_PATTERN.sub("", cleaned)
+    cleaned = cleaned.replace("[", "").replace("]", "")
+    return re.sub(r"\s+", " ", cleaned).strip()

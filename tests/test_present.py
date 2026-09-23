@@ -5,14 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from PIL import Image
 
+from src.core.minimax_tts import language_boost_for
+from src.core.parser import speech_for_tts
 from src.present.mux import (
-    FfmpegNotFoundError,
     build_presentation_video,
     concat_video_segments,
-    require_ffmpeg,
     render_slide_segment,
 )
 from src.present.segments import (
@@ -33,6 +32,28 @@ OUTLINE = """# Deck
 ## Slide 2: Body
 [Speech: Here is the main point.]
 """
+
+
+def test_speech_for_tts_strips_markdown() -> None:
+    text = "Run **`pytest`** first — see [the docs](https://x.y).\n- Then *ship* it [pause]"
+    assert speech_for_tts(text) == "Run pytest first — see the docs. Then ship it pause"
+
+
+def test_speech_for_tts_keeps_plain_and_cjk_text() -> None:
+    assert speech_for_tts("大家好，今天讲 **验证**。") == "大家好，今天讲 验证。"
+    assert speech_for_tts("snake_case stays") == "snake_case stays"
+
+
+def test_language_boost_for() -> None:
+    assert language_boost_for("大家好") == "Chinese"
+    assert language_boost_for("Hello everyone") == "auto"
+
+
+def test_collect_slide_segments_cleans_speech(tmp_path: Path) -> None:
+    Image.new("RGB", (64, 36), color="red").save(tmp_path / "slide_p01_v01.png")
+    outline = "# Deck\n\n---\n\n## Slide 1: Cover\n[Speech: Welcome to **the** talk.]\n"
+    segments = collect_slide_segments(tmp_path, outline)
+    assert segments[0].speech_text == "Welcome to the talk."
 
 
 def test_audio_path_for_image() -> None:
@@ -57,13 +78,6 @@ def test_collect_slide_segments_page_filter(tmp_path: Path) -> None:
     segments = collect_slide_segments(tmp_path, OUTLINE, page_filter={2})
     assert len(segments) == 1
     assert segments[0].slide_number == 2
-
-
-def test_require_ffmpeg_missing() -> None:
-    with patch("src.present.mux.shutil.which", return_value=None):
-        with patch("src.present.mux.resolve_ffmpeg", side_effect=FfmpegNotFoundError("ffmpeg")):
-            with pytest.raises(FfmpegNotFoundError, match="ffmpeg"):
-                require_ffmpeg()
 
 
 def test_render_slide_segment_invokes_ffmpeg(tmp_path: Path) -> None:

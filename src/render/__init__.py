@@ -1,7 +1,6 @@
-"""Render pipeline: style references + outline → slide images and PDF."""
+"""Render pipeline: script plus style plates to slide images and PPTX."""
 
-from src.render.gen import SlideImageGenerator
-from src.render.style.refs import (
+from src.design.plates import (
     STYLE_BASE_CONTENT_FILENAME,
     STYLE_BASE_NONCONTENT_FILENAME,
     STYLE_CONTENT_FILENAME,
@@ -14,6 +13,7 @@ from src.render.style.refs import (
     generate_style_references,
     select_style_paths_for_role,
 )
+from src.render.gen import SlideImageGenerator
 
 __all__ = [
     "SlideImageGenerator",

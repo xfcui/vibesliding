@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.core.config import _normalize_ini_for_configparser, load_config, load_outline_config
+from src.core.config import _normalize_ini_for_configparser, load_config, load_write_config
 
 
 def test_normalize_prepends_default_section() -> None:
@@ -174,14 +174,12 @@ def test_load_openrouter_proxy_from_section(tmp_path: Path) -> None:
     assert c.proxy == "http://127.0.0.1:9"
 
 
-def test_load_outline_config(
+def test_load_write_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("VALYU_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_TXT_MODEL", raising=False)
-    monkeypatch.delenv("VALYU_MODE", raising=False)
     env = tmp_path / ".env"
     env.write_text(
         "max_concurrent = 3\n\n"
@@ -189,80 +187,37 @@ def test_load_outline_config(
         "api_key = or-key\n"
         "txt_model = anthropic/claude-sonnet-4\n"
         "img_model = google/image-model\n"
-        "use_proxy = false\n\n"
-        "[valyu]\n"
-        "api_key = valyu-key\n"
-        "mode = heavy\n",
+        "use_proxy = false\n",
         encoding="utf-8",
     )
-    c = load_outline_config(config_path=env)
-    assert c.valyu_api_key == "valyu-key"
-    assert c.valyu_mode == "heavy"
-    assert c.valyu_categories == ()
+    c = load_write_config(config_path=env)
     assert c.openrouter_api_key == "or-key"
     assert c.txt_model == "anthropic/claude-sonnet-4"
     assert c.max_concurrent == 3
+    assert c.proxy is None
 
 
-def test_load_outline_config_cli_overrides(
+def test_load_write_config_cli_overrides(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("VALYU_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     env = tmp_path / ".env"
     env.write_text(
         "max_concurrent = 1\n\n"
-        "[openrouter]\napi_key = or\nimg_model = m\n"
-        "[valyu]\napi_key = v\n",
+        "[openrouter]\napi_key = or\nimg_model = m\n",
         encoding="utf-8",
     )
-    c = load_outline_config(
+    c = load_write_config(
         config_path=env,
-        valyu_api_key_override="cli-valyu",
         openrouter_api_key_override="cli-or",
         txt_model_override="openai/gpt-4",
-        valyu_mode_override="fast",
-        valyu_categories_override="research, markets",
     )
-    assert c.valyu_api_key == "cli-valyu"
     assert c.openrouter_api_key == "cli-or"
     assert c.txt_model == "openai/gpt-4"
-    assert c.valyu_mode == "fast"
-    assert c.valyu_categories == ("research", "markets")
 
 
-def test_load_outline_config_valyu_categories_from_env_section(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("VALYU_CATEGORIES", raising=False)
-    env = tmp_path / ".env"
-    env.write_text(
-        "max_concurrent = 1\n\n"
-        "[openrouter]\napi_key = or\ntxt_model = m\n"
-        "[valyu]\napi_key = v\ncategories = research,healthcare\n",
-        encoding="utf-8",
-    )
-    c = load_outline_config(config_path=env)
-    assert c.valyu_categories == ("research", "healthcare")
-
-
-def test_load_outline_config_rejects_unknown_valyu_categories(
-    tmp_path: Path,
-) -> None:
-    env = tmp_path / ".env"
-    env.write_text(
-        "max_concurrent = 1\n\n"
-        "[openrouter]\napi_key = or\ntxt_model = m\n"
-        "[valyu]\napi_key = v\ncategories = not-a-category\n",
-        encoding="utf-8",
-    )
-    with pytest.raises(ValueError, match="Unknown Valyu datasource categories"):
-        load_outline_config(config_path=env)
-
-
-def test_load_outline_config_volcengine_txt_model_fallback(
+def test_load_write_config_volcengine_txt_model_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -273,15 +228,14 @@ def test_load_outline_config_volcengine_txt_model_fallback(
         "max_concurrent = 1\n\n"
         "[openrouter]\napi_key = or\n"
         "[volcengine]\napi_key = ve\n"
-        "txt_model = doubao-1-5-pro-32k-250115\n"
-        "[valyu]\napi_key = v\n",
+        "txt_model = doubao-1-5-pro-32k-250115\n",
         encoding="utf-8",
     )
-    c = load_outline_config(config_path=env)
+    c = load_write_config(config_path=env)
     assert c.txt_model == "doubao-1-5-pro-32k-250115"
 
 
-def test_load_outline_config_minimax_txt_model_from_active_provider(
+def test_load_write_config_minimax_txt_model_from_active_provider(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -297,12 +251,26 @@ def test_load_outline_config_minimax_txt_model_from_active_provider(
         "[volcengine]\napi_key = ve\n"
         "txt_model = volcengine-model\n"
         "[minimax]\napi_key = mm\n"
-        "txt_model = minimax-model\n"
-        "[valyu]\napi_key = v\n",
+        "txt_model = minimax-model\n",
         encoding="utf-8",
     )
-    c = load_outline_config(config_path=env)
+    c = load_write_config(config_path=env)
     assert c.txt_model == "volcengine-model"
+
+
+def test_load_write_config_uses_openrouter_proxy(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text(
+        "proxy = socks5://127.0.0.1:1080\n"
+        "provider = openrouter\n\n"
+        "[openrouter]\n"
+        "api_key = sk-or\n"
+        "txt_model = claude\n"
+        "use_proxy = true\n",
+        encoding="utf-8",
+    )
+    c = load_write_config(config_path=env)
+    assert c.proxy == "socks5://127.0.0.1:1080"
 
 
 def test_load_minimax_tts_config_reads_unified_section(tmp_path: Path) -> None:
@@ -339,41 +307,4 @@ def test_volcengine_missing_max_raises(tmp_path: Path) -> None:
             output_dir=tmp_path / "o",
             provider_override="volcengine",
         )
-
-
-def test_valyu_proxy_bypass_by_default(tmp_path: Path) -> None:
-    env = tmp_path / ".env"
-    env.write_text(
-        "proxy = socks5://127.0.0.1:1080\n"
-        "provider = openrouter\n\n"
-        "[openrouter]\n"
-        "api_key = sk-or\n"
-        "txt_model = claude\n"
-        "use_proxy = true\n"
-        "[valyu]\n"
-        "api_key = v-key\n",
-        encoding="utf-8",
-    )
-    c = load_outline_config(config_path=env)
-    assert c.proxy == "socks5://127.0.0.1:1080"
-    assert c.valyu_proxy is None  # Bypassed by default!
-
-
-def test_valyu_proxy_opt_in(tmp_path: Path) -> None:
-    env = tmp_path / ".env"
-    env.write_text(
-        "proxy = socks5://127.0.0.1:1080\n"
-        "provider = openrouter\n\n"
-        "[openrouter]\n"
-        "api_key = sk-or\n"
-        "txt_model = claude\n"
-        "use_proxy = true\n"
-        "[valyu]\n"
-        "api_key = v-key\n"
-        "use_proxy = true\n",
-        encoding="utf-8",
-    )
-    c = load_outline_config(config_path=env)
-    assert c.proxy == "socks5://127.0.0.1:1080"
-    assert c.valyu_proxy == "socks5://127.0.0.1:1080"
 

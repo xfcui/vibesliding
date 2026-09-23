@@ -9,13 +9,12 @@ from click.testing import CliRunner
 
 from src.core.api_client import OpenRouterClient
 from PIL import Image
+from pptx import Presentation
 
 from src.render.cli import (
     main,
     parse_page_spec,
-    expand_article_paths,
-    expand_style_paths,
-    extract_article_patterns_from_outline,
+    collect_style_images,
     _resolve_style_paths,
 )
 
@@ -62,67 +61,12 @@ def test_parse_page_spec_invalid():
     with pytest.raises(ValueError):
         parse_page_spec("5-1")
 
-def test_expand_article_paths(tmp_path):
-    # Create dummy files
-    f1 = tmp_path / "test1.pdf"
-    f1.touch()
-    f2 = tmp_path / "test2.md"
-    f2.touch()
-    
-    # Test single path
-    assert expand_article_paths([str(f1)]) == [f1]
-    
-    # Test glob
-    pattern = str(tmp_path / "*.pdf")
-    assert expand_article_paths([pattern]) == [f1]
-    
-    # Test multiple
-    assert set(expand_article_paths([str(f1), str(f2)])) == {f1, f2}
 
-
-def test_extract_article_patterns_from_outline_preserves_spaces():
-    md = """
-# Deck
-
-[Articles:
-@examples/Exploring Cursor AI Coding Assistant.md,
-"examples/OpenClaw Success and Implementation.md"
-]
-
-## Slide 1: Intro
-Content
-"""
-    assert extract_article_patterns_from_outline(md) == [
-        "examples/Exploring Cursor AI Coding Assistant.md",
-        "examples/OpenClaw Success and Implementation.md",
-    ]
-
-
-def test_expand_article_paths_resolves_outline_relative_paths(tmp_path):
-    examples = tmp_path / "examples"
-    examples.mkdir()
-    outline_dir = examples
-    article_path = examples / "Research Notes.md"
-    article_path.write_text("# notes", encoding="utf-8")
-
-    assert expand_article_paths(["Research Notes.md"], base_dir=outline_dir) == [
-        article_path
-    ]
-
-def test_expand_article_paths_invalid(tmp_path):
-    f = tmp_path / "test.txt"
-    f.touch()
-    with pytest.raises(click.UsageError):
-        expand_article_paths([str(f)])
-    with pytest.raises(click.UsageError):
-        expand_article_paths(["nonexistent.pdf"])
-
-
-def test_expand_style_paths_glob_sorted(tmp_path):
+def test_collect_style_images_sorted(tmp_path):
     (tmp_path / "style_zebra.png").write_bytes(b"x")
     (tmp_path / "style_alpha.png").write_bytes(b"y")
-    pattern = str(tmp_path / "style_*.png")
-    got = expand_style_paths([pattern])
+    (tmp_path / "bad.gif").write_bytes(b"g")
+    got = collect_style_images(tmp_path)
     assert [p.name for p in got] == ["style_alpha.png", "style_zebra.png"]
 
 
@@ -138,25 +82,38 @@ def test_resolve_style_paths_defaults_to_project_style_dir(
     work.mkdir()
     (work / "style_cover.png").write_bytes(b"old")
 
-    got = _resolve_style_paths((), work)
+    got = _resolve_style_paths(Path("style"), explicit=False)
     assert got is not None
     assert [p.name for p in got] == ["style_content.png", "style_cover.png"]
     assert all(p.resolve().parent == style.resolve() for p in got)
 
 
-def test_expand_style_paths_duplicate_glob_same_file(tmp_path):
-    p = tmp_path / "style_x.png"
-    p.write_bytes(b"z")
-    pat = str(tmp_path / "*.png")
-    got = expand_style_paths([pat, pat])
-    assert len(got) == 1 and got[0] == p
+def test_resolve_style_paths_rejects_glob(tmp_path: Path) -> None:
+    with pytest.raises(click.UsageError, match="takes a directory, not a glob"):
+        _resolve_style_paths(tmp_path / "*.png", explicit=True)
 
 
-def test_expand_style_paths_invalid_extension(tmp_path):
-    gif = tmp_path / "bad.gif"
-    gif.write_bytes(b"g")
-    with pytest.raises(click.UsageError, match="Unsupported style"):
-        expand_style_paths([str(gif)])
+def test_resolve_style_paths_rejects_file(tmp_path: Path) -> None:
+    plate = tmp_path / "style_cover.png"
+    plate.write_bytes(b"c")
+    with pytest.raises(click.UsageError, match="takes a directory, not a file"):
+        _resolve_style_paths(plate, explicit=True)
+
+
+def test_resolve_style_paths_explicit_missing_dir_errors(tmp_path: Path) -> None:
+    with pytest.raises(click.UsageError, match="Style directory not found"):
+        _resolve_style_paths(tmp_path / "nope", explicit=True)
+
+
+def test_resolve_style_paths_explicit_empty_dir_errors(tmp_path: Path) -> None:
+    with pytest.raises(click.UsageError, match="No style images in"):
+        _resolve_style_paths(tmp_path, explicit=True)
+
+
+def test_resolve_style_paths_default_missing_dir_falls_back_to_first_slide(
+    tmp_path: Path,
+) -> None:
+    assert _resolve_style_paths(tmp_path / "nope", explicit=False) is None
 
 
 def test_balance_only_prints_openrouter_credits(
@@ -197,7 +154,7 @@ def test_balance_only_ignores_outline_flag(tmp_path: Path, monkeypatch: pytest.M
         )
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["--balance-only", "--outline", str(outline)])
+    result = runner.invoke(main, ["--balance-only", "--script", str(outline)])
     assert result.exit_code == 0
 
 
@@ -217,13 +174,13 @@ def test_missing_outline_file_shows_error(tmp_path: Path, monkeypatch: pytest.Mo
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["--work", str(tmp_path), "--outline", str(tmp_path / "missing.md")],
+        ["--work", str(tmp_path), "--script", str(tmp_path / "missing.md")],
     )
     assert result.exit_code != 0
-    assert "Outline file not found" in result.output
+    assert "Script file not found" in result.output
 
 
-def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
+def test_pptx_only_rebuilds_combined_pptx(tmp_path: Path) -> None:
     work = tmp_path / "work"
     work.mkdir()
     out = work / "image_test"
@@ -252,39 +209,42 @@ def test_pdf_only_rebuilds_combined_pdf(tmp_path: Path) -> None:
     result = runner.invoke(
         main,
         [
-            "--pdf-only",
+            "--pptx-only",
             "--work",
             str(work),
             "--output",
             str(out),
             "--variant",
             "1",
-            "--outline",
+            "--script",
             str(outline),
         ],
     )
     assert result.exit_code == 0, result.output
-    assert "presentation_slides_test.pdf" in result.output
-    assert "presentation_speech_test.pdf" in result.output
-    assert "2 page" in result.output
-    assert (work / "presentation_slides_test.pdf").exists()
-    assert (work / "presentation_speech_test.pdf").exists()
+    assert "slides_test.pptx" in result.output
+    assert "2 slide" in result.output
+    pptx_path = work / "slides_test.pptx"
+    assert pptx_path.exists()
+    prs = Presentation(str(pptx_path))
+    assert len(prs.slides) == 2
+    assert "Hello slide one." in prs.slides[0].notes_slide.notes_text_frame.text
+    assert "Hello slide two." in prs.slides[1].notes_slide.notes_text_frame.text
 
 
-def test_pdf_only_requires_output(tmp_path: Path) -> None:
+def test_pptx_only_requires_output(tmp_path: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(main, ["--pdf-only"])
+    result = runner.invoke(main, ["--pptx-only"])
     assert result.exit_code != 0
     assert "--output" in result.output
 
 
-def test_expand_style_paths_empty_patterns() -> None:
-    assert expand_style_paths([]) == []
+def test_collect_style_images_empty_dir(tmp_path: Path) -> None:
+    assert collect_style_images(tmp_path) == []
 
 
-def test_pdf_only_conflicts_with_balance_only() -> None:
+def test_pptx_only_conflicts_with_balance_only() -> None:
     runner = CliRunner()
-    result = runner.invoke(main, ["--pdf-only", "--output", "out", "--balance-only"])
+    result = runner.invoke(main, ["--pptx-only", "--output", "out", "--balance-only"])
     assert result.exit_code != 0
     assert "cannot be used with --balance-only" in result.output
 
@@ -332,7 +292,7 @@ def test_compose_cli_first_slide_mode_mocked(
             [
                 "--work",
                 str(work),
-                "--outline",
+                "--script",
                 str(outline),
                 "--output",
                 str(out_dir),
@@ -342,7 +302,7 @@ def test_compose_cli_first_slide_mode_mocked(
 
     assert result.exit_code == 0, result.output
     assert "first slide only" in result.output
-    assert "Outline backup:" in result.output
+    assert "Script backup:" in result.output
     assert (out_dir / "outline_16.md").exists()
     assert (out_dir / "outline_16.md").read_text(encoding="utf-8") == SAMPLE_OUTLINE
     assert "Done. Saved 1 image(s)" in result.output
@@ -356,8 +316,9 @@ def test_compose_cli_all_slides_with_style_mocked(
     work.mkdir()
     outline = work / "outline_16.md"
     outline.write_text(SAMPLE_OUTLINE, encoding="utf-8")
-    style = work / "style_cover.png"
-    style.write_bytes(mock_image_bytes)
+    style = tmp_path / "plates"
+    style.mkdir()
+    (style / "style_cover.png").write_bytes(mock_image_bytes)
     (tmp_path / ".env").write_text(
         "max_concurrent = 1\nprovider = openrouter\n\n"
         "[openrouter]\napi_key = sk-t\nimg_model = m\n",
@@ -380,7 +341,7 @@ def test_compose_cli_all_slides_with_style_mocked(
             [
                 "--work",
                 str(work),
-                "--outline",
+                "--script",
                 str(outline),
                 "--style",
                 str(style),
@@ -391,45 +352,5 @@ def test_compose_cli_all_slides_with_style_mocked(
         )
 
     assert result.exit_code == 0, result.output
-    assert "Style (1): style_cover.png" in result.output
+    assert "(1): style_cover.png" in result.output
     assert "Done. Saved 2 image(s)" in result.output
-
-
-def test_compose_cli_loads_articles_from_outline_tag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
-    work = tmp_path / "work"
-    work.mkdir()
-    article = work / "notes.md"
-    article.write_text("# Notes", encoding="utf-8")
-    outline = work / "outline_16.md"
-    outline.write_text(
-        SAMPLE_OUTLINE + f"\n[Articles: {article.name}]\n",
-        encoding="utf-8",
-    )
-    (tmp_path / ".env").write_text(
-        "max_concurrent = 1\nprovider = openrouter\n\n"
-        "[openrouter]\napi_key = sk-t\nimg_model = m\n",
-        encoding="utf-8",
-    )
-
-    with (
-        patch("src.render.cli._resolve_style_paths", return_value=None),
-        patch(
-            "src.render.cli.SlideImageGenerator.generate_first_slide_images",
-            new=AsyncMock(return_value=[]),
-        ),
-    ):
-        runner = CliRunner()
-        result = runner.invoke(
-            main,
-            [
-                "--work",
-                str(work),
-                "--outline",
-                str(outline),
-                "--no-balance",
-            ],
-        )
-
-    assert result.exit_code == 0, result.output
-    assert "Articles: 1 files (1 Markdown)" in result.output
